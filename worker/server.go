@@ -15,35 +15,57 @@ import(
 	"github.com/rs/cors"
 )
 
-type ContainerHostConfigMounts struct {
-  Target string
+type ExposedPort struct {
+	ContainerPort string
+	HostPort string
+	HostIp string
+}
+
+type Mount struct {
+	Target string
 	Source string
 	Type string
 	ReadOnly bool
 }
 
-type ContainerHostConfigPortBindings struct {
+type ContainerConfig struct {
+	Name string
+	Image string
+	ExposedPorts []ExposedPort
+	Mounts []Mount
+	Env []string
+	AutoRemove bool
+	Privileged bool
+}
+/*
+type DockerContainerHostConfigMounts struct {
+  Target string
+	Source string
+	Type string
+	ReadOnly bool
+}
+*/
+type DockerContainerHostConfigPortBindings struct {
   HostIp string
   HostPort string
 }
 
-type ContainerHostConfig struct {
-  PortBindings map[string][]ContainerHostConfigPortBindings
-  Mounts []ContainerHostConfigMounts
+type DockerContainerHostConfig struct {
+  PortBindings map[string][]DockerContainerHostConfigPortBindings
+  Mounts []Mount
   AutoRemove bool
   Privileged bool
 }
 
-type ContainerConfig struct {
+type DockerContainerConfig struct {
   Image string
   Env []string
   ExposedPorts map[string]struct{}
-  HostConfig ContainerHostConfig
+  HostConfig DockerContainerHostConfig
 }
 
 type CreateReq struct {
   Key string
-  ContainerName string
   Container ContainerConfig
 }
 
@@ -98,7 +120,33 @@ func fakeDial(proto, addr string) (conn net.Conn, err error) {
   return net.Dial("unix", "/var/run/docker.sock")
 }
 
-func CreateContainer(ContainerName string, Container ContainerConfig) (id string, err error){
+func getContainerRuntime() string {
+  return "docker"
+}
+
+func ConvertContainerConfigToDockerContainerConfig(c ContainerConfig) DockerContainerConfig {
+  d := DockerContainerConfig{}
+  d.Image = c.Image
+  d.Env = c.Env
+  d.ExposedPorts = make(map[string]struct{})
+  for _, port := range c.ExposedPorts {
+    d.ExposedPorts[port.ContainerPort + "/tcp"] = struct{}{}
+  }
+  d.HostConfig.PortBindings = make(map[string][]DockerContainerHostConfigPortBindings)
+  for _, port := range c.ExposedPorts {
+    p := DockerContainerHostConfigPortBindings{}
+    p.HostIp = port.HostIp
+    p.HostPort = port.HostPort
+    d.HostConfig.PortBindings[port.ContainerPort + "/tcp"] = []DockerContainerHostConfigPortBindings{p}
+  }
+  d.HostConfig.Mounts = c.Mounts
+  d.HostConfig.AutoRemove = c.AutoRemove
+  d.HostConfig.Privileged = c.Privileged
+
+  return d
+}
+
+func DockerCreateContainer(ContainerName string, Container DockerContainerConfig) (id string, err error){
   tr := &http.Transport{
     Dial: fakeDial,
   }
@@ -132,7 +180,7 @@ func CreateContainer(ContainerName string, Container ContainerConfig) (id string
   return j.Id, nil
 }
 
-func StartContainer(ContainerId string) error{
+func DockerStartContainer(ContainerId string) error{
   tr := &http.Transport{
     Dial: fakeDial,
   }
@@ -158,7 +206,7 @@ func StartContainer(ContainerId string) error{
   return nil
 }
 
-func StopContainer(ContainerId string) error{
+func DockerStopContainer(ContainerId string) error{
   tr := &http.Transport{
     Dial: fakeDial,
   }
@@ -194,8 +242,15 @@ func CreateHandler(w http.ResponseWriter, r *http.Request) {
 	j := CreateReq{}
 	json.NewDecoder(r.Body).Decode(&j)
 
-  id, _ := CreateContainer(j.ContainerName, j.Container)
-  StartContainer(id)
+  if(getContainerRuntime() == "docker") {
+    container := ConvertContainerConfigToDockerContainerConfig(j.Container)
+    fmt.Print(container)
+    fmt.Println(" ")
+    id, _ := DockerCreateContainer(j.Container.Name, container)
+    fmt.Print(id)
+    fmt.Println(" ")
+    DockerStartContainer(id)
+  }
 
   p := Resp{true, ""}
   json.NewEncoder(w).Encode(p)
@@ -210,7 +265,7 @@ func StopHandler(w http.ResponseWriter, r *http.Request) {
   containerName := vars["container"]
 
   if(containerName != ""){
-    StopContainer(containerName)
+    DockerStopContainer(containerName)
     p := Resp{true, ""}
     json.NewEncoder(w).Encode(p)
   } else {
