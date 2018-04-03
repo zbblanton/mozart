@@ -323,6 +323,32 @@ func ContainersCreateHandler(w http.ResponseWriter, r *http.Request) {
   }
 }
 
+func ContainersStateUpdateHandler(w http.ResponseWriter, r *http.Request) {
+  w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+  w.WriteHeader(http.StatusOK)
+  defer r.Body.Close()
+
+  type StateUpdateReq struct {
+    Key string
+    ContainerName string
+    State string
+  }
+
+  j := StateUpdateReq{}
+	json.NewDecoder(r.Body).Decode(&j)
+
+  //TODO: Verify Worker Key here, the container must live on this host.
+  containers.mux.Lock()
+  fmt.Print(j)
+  c := containers.Containers[j.ContainerName]
+  c.State = j.State
+  fmt.Print(c)
+  containers.Containers[j.Key] = c
+  containers.mux.Unlock()
+
+  resp := Resp{true, ""}
+  json.NewEncoder(w).Encode(resp)
+}
 
 func ContainersListHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "application/json; charset=UTF-8")
@@ -330,6 +356,29 @@ func ContainersListHandler(w http.ResponseWriter, r *http.Request) {
   defer r.Body.Close()
 
   resp := ContainerListResp{containers.Containers, true, ""}
+  json.NewEncoder(w).Encode(resp)
+}
+
+func ContainersListWorkersHandler(w http.ResponseWriter, r *http.Request) {
+  w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+  w.WriteHeader(http.StatusOK)
+  vars := mux.Vars(r)
+  defer r.Body.Close()
+
+  type ContainersListWorkers struct {
+    Containers []string
+    Success bool
+    Error string
+  }
+
+  c := ContainersListWorkers{[]string{}, true, ""}
+  for _, container := range containers.Containers {
+    if (container.Worker == vars["worker"]){
+      c.Containers = append(c.Containers, container.Name)
+    }
+  }
+
+  resp := c
   json.NewEncoder(w).Encode(resp)
 }
 
@@ -389,9 +438,10 @@ func main() {
 	router.HandleFunc("/", RootHandler)
 
   router.HandleFunc("/containers/create", ContainersCreateHandler)
-  router.HandleFunc("/containers/list/", ContainersListHandler)
-  router.HandleFunc("/containers/list/{worker}", RootHandler)
   router.HandleFunc("/containers/stop/{container}", RootHandler)
+  router.HandleFunc("/containers/list/", ContainersListHandler)
+  router.HandleFunc("/containers/list/{worker}", ContainersListWorkersHandler)
+  router.HandleFunc("/containers/{container}/state/update", ContainersStateUpdateHandler)
   router.HandleFunc("/containers/status/{container}", RootHandler)
   router.HandleFunc("/containers/inspect/{container}", RootHandler)
 

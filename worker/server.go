@@ -7,6 +7,7 @@ import(
   "bytes"
   "fmt"
   //"io/ioutil"
+  "time"
 	"log"
 	"strings"
 	"encoding/json"
@@ -120,6 +121,57 @@ func fakeDial(proto, addr string) (conn net.Conn, err error) {
   return net.Dial("unix", "/var/run/docker.sock")
 }
 
+func MonitorContainers() {
+  for {
+    //Get list of containers that should be running on this worker from the master
+    url := "http://10.0.0.28:8181/containers/list/10.0.0.28:8080"
+    //url := "http://10.0.0.28:8181/list"
+    req, err := http.Get(url)
+    if err != nil {
+        panic(err)
+    }
+    type ContainersListResp struct {
+      Containers []string
+      Success bool
+      Error string
+    }
+    j := ContainersListResp{}
+    json.NewDecoder(req.Body).Decode(&j)
+    req.Body.Close()
+
+    //fmt.Print(j)
+    //Loop through the containers and check the status, if not running send new state to master
+    for _, container := range j.Containers {
+      fmt.Println(container)
+      status, err := DockerContainerStatus(container)
+      if err != nil{
+        panic("Failed to get container status.")
+      }
+      if (status != "running") {
+        fmt.Println(container + ": Not running, notifying master.")
+        type StateUpdateReq struct {
+          Key string
+          ContainerName string
+          State string
+        }
+        j := StateUpdateReq{Key: "ADDCHECKINGFORTHIS", ContainerName: container, State: status}
+        b := new(bytes.Buffer)
+        json.NewEncoder(b).Encode(j)
+        url := "http://10.0.0.28:8181/containers/" + container + "/state/update"
+        _, err := http.Post(url, "application/json; charset=utf-8", b)
+        if err != nil {
+            panic(err)
+        }
+      }
+      fmt.Println(status)
+    }
+
+    fmt.Println("Waiting 5 seconds!")
+    time.Sleep(time.Duration(5) * time.Second)
+  }
+  os.Exit(1) //In case the for loop exits, stop the whole program.
+}
+
 func getContainerRuntime() string {
   return "docker"
 }
@@ -206,6 +258,33 @@ func DockerStartContainer(ContainerId string) error{
   return nil
 }
 
+func DockerContainerStatus(ContainerName string) (status string, err error) {
+  type DockerStatusResp struct {
+    State struct {
+      Status string
+    }
+  }
+
+  tr := &http.Transport{
+    Dial: fakeDial,
+  }
+
+  client := &http.Client{Transport: tr}
+  url := "http://d/containers/" + ContainerName + "/json"
+  req, err := http.NewRequest("GET", url, nil)
+  req.Header.Set("Content-Type", "application/json")
+  resp, err := client.Do(req)
+  if err != nil {
+      panic(err)
+  }
+  j := DockerStatusResp{}
+	json.NewDecoder(resp.Body).Decode(&j)
+  resp.Body.Close()
+  //ADD VERIFICATION HERE!!!!!!!!!!!!!
+
+  return j.State.Status, nil
+}
+
 func DockerStopContainer(ContainerId string) error{
   tr := &http.Transport{
     Dial: fakeDial,
@@ -283,6 +362,8 @@ func main() {
   router.HandleFunc("/stop/{container}", StopHandler)
   router.HandleFunc("/status/{container}", RootHandler)
   router.HandleFunc("/inspect/{container}", RootHandler)
+
+  go MonitorContainers()
 
 	handler := cors.Default().Handler(router)
 	err := http.ListenAndServe(":8080", handler)
