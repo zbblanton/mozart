@@ -6,7 +6,9 @@ import(
   "net"
   "bytes"
   "fmt"
-  //"io/ioutil"
+  "io/ioutil"
+  "bufio"
+  "io"
   "time"
 	"log"
 	"strings"
@@ -198,25 +200,38 @@ func ConvertContainerConfigToDockerContainerConfig(c ContainerConfig) DockerCont
   return d
 }
 
-func DockerCreateContainer(ContainerName string, Container DockerContainerConfig) (id string, err error){
+func DockerCallRuntimeApi(method string, url string, body io.Reader) (respBody []byte, err error)  {
   tr := &http.Transport{
     Dial: fakeDial,
   }
 
   client := &http.Client{Transport: tr}
   b := new(bytes.Buffer)
-  json.NewEncoder(b).Encode(Container)
-  url := "http://d/containers/create"
-  if(ContainerName != ""){
-    url = url + "?name=" + ContainerName
-  }
-  fmt.Println(url)
-  req, err := http.NewRequest("POST", url, b)
+  json.NewEncoder(b).Encode(body)
+  req, err := http.NewRequest(method, url, body)
   req.Header.Set("Content-Type", "application/json")
   resp, err := client.Do(req)
   if err != nil {
       panic(err)
   }
+
+  reader := bufio.NewReader(resp.Body)
+  respBody, _ = ioutil.ReadAll(reader)
+
+  resp.Body.Close()
+
+  return respBody, nil
+}
+
+func DockerCreateContainer(ContainerName string, Container DockerContainerConfig) (id string, err error){
+  buff := new(bytes.Buffer)
+  json.NewEncoder(buff).Encode(Container)
+  url := "http://d/containers/create"
+  if(ContainerName != ""){
+    url = url + "?name=" + ContainerName
+  }
+
+  body, _ := DockerCallRuntimeApi("POST", url, buff)
 
   type ContainerCreateResp struct {
     Id string
@@ -224,8 +239,8 @@ func DockerCreateContainer(ContainerName string, Container DockerContainerConfig
     Message string
   }
   j := ContainerCreateResp{}
-	json.NewDecoder(resp.Body).Decode(&j)
-  resp.Body.Close()
+  b := bytes.NewReader(body)
+  json.NewDecoder(b).Decode(&j)
 
   //ADD VERIFICATION HERE!!!!!!!!!!!!!
 
@@ -233,25 +248,29 @@ func DockerCreateContainer(ContainerName string, Container DockerContainerConfig
 }
 
 func DockerStartContainer(ContainerId string) error{
-  tr := &http.Transport{
-    Dial: fakeDial,
-  }
-
-  client := &http.Client{Transport: tr}
   url := "http://d/containers/" + ContainerId + "/start"
-  req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(`{	}`)))
-  req.Header.Set("Content-Type", "application/json")
-  resp, err := client.Do(req)
-  if err != nil {
-      panic(err)
-  }
-
+  body, _ := DockerCallRuntimeApi("POST", url, bytes.NewBuffer([]byte(`{	}`)))
   type ContainerStartResp struct {
     Message string
   }
   j := ContainerStartResp{}
-	json.NewDecoder(resp.Body).Decode(&j)
-  resp.Body.Close()
+  b := bytes.NewReader(body)
+	json.NewDecoder(b).Decode(&j)
+
+  //ADD VERIFICATION HERE!!!!!!!!!!!!!
+
+  return nil
+}
+
+func DockerStopContainer(ContainerId string) error{
+  url := "http://d/containers/" + ContainerId + "/stop"
+  body, _ := DockerCallRuntimeApi("POST", url, bytes.NewBuffer([]byte(`{	}`)))
+  type ContainerStopResp struct {
+    Message string
+  }
+  j := ContainerStopResp{}
+  b := bytes.NewReader(body)
+	json.NewDecoder(b).Decode(&j)
 
   //ADD VERIFICATION HERE!!!!!!!!!!!!!
 
@@ -259,12 +278,12 @@ func DockerStartContainer(ContainerId string) error{
 }
 
 func DockerContainerStatus(ContainerName string) (status string, err error) {
+  /*
   type DockerStatusResp struct {
     State struct {
       Status string
     }
   }
-
   tr := &http.Transport{
     Dial: fakeDial,
   }
@@ -277,38 +296,21 @@ func DockerContainerStatus(ContainerName string) (status string, err error) {
   if err != nil {
       panic(err)
   }
+*/
+  url := "http://d/containers/" + ContainerName + "/json"
+  body, _ := DockerCallRuntimeApi("GET", url, nil)
+  type DockerStatusResp struct {
+    State struct {
+      Status string
+    }
+  }
   j := DockerStatusResp{}
-	json.NewDecoder(resp.Body).Decode(&j)
-  resp.Body.Close()
+  b := bytes.NewReader(body)
+	json.NewDecoder(b).Decode(&j)
+  //resp.Body.Close()
   //ADD VERIFICATION HERE!!!!!!!!!!!!!
 
   return j.State.Status, nil
-}
-
-func DockerStopContainer(ContainerId string) error{
-  tr := &http.Transport{
-    Dial: fakeDial,
-  }
-
-  client := &http.Client{Transport: tr}
-  url := "http://d/containers/" + ContainerId + "/stop"
-  req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(`{	}`)))
-  req.Header.Set("Content-Type", "application/json")
-  resp, err := client.Do(req)
-  if err != nil {
-      panic(err)
-  }
-
-  type ContainerStopResp struct {
-    Message string
-  }
-  j := ContainerStopResp{}
-	json.NewDecoder(resp.Body).Decode(&j)
-  resp.Body.Close()
-
-  //ADD VERIFICATION HERE!!!!!!!!!!!!!
-
-  return nil
 }
 
 func CreateHandler(w http.ResponseWriter, r *http.Request) {
