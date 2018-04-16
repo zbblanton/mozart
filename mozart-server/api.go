@@ -7,9 +7,12 @@ import(
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
   "crypto/rand"
+  "crypto/tls"
+  "crypto/x509"
 	"encoding/base64"
   "encoding/json"
   "fmt"
+  "io/ioutil"
 )
 
 func RootHandler(w http.ResponseWriter, r *http.Request) {
@@ -29,8 +32,8 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
   //ADD VERIFICATION!!!!
 
   //Verify key
-  if(j.JoinKey != config.WorkerJoinKey){
-    fmt.Println(config.WorkerJoinKey)
+  if(j.JoinKey != config.AgentJoinKey){
+    fmt.Println(config.AgentJoinKey)
     fmt.Println(j.JoinKey)
     resp := NodeJoinResp{ServerKey: "", Success: false, Error: "Invalid join key"}
     json.NewEncoder(w).Encode(resp)
@@ -142,7 +145,7 @@ func ContainersListWorkersHandler(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(resp)
 }
 
-func startApiServer(ServerIp string, ServerPort string) {
+func startApiServer(serverIp string, serverPort string, caCert string, serverCert string, serverKey string) {
   router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/", RootHandler)
 
@@ -162,8 +165,30 @@ func startApiServer(ServerIp string, ServerPort string) {
   router.HandleFunc("/service/list", RootHandler)
   router.HandleFunc("/service/inspect", RootHandler)
 
+  handler := cors.Default().Handler(router)
+
+  //Setup TLS config
+  rootCa, err := ioutil.ReadFile(caCert)
+  if err != nil {
+    panic("cant open file")
+  }
+  rootCaPool := x509.NewCertPool()
+  if ok := rootCaPool.AppendCertsFromPEM([]byte(rootCa)); !ok {
+    panic("Cannot parse root CA.")
+  }
+  tlsCfg := &tls.Config{
+      RootCAs: rootCaPool}
+
+  //Setup server config
+  server := &http.Server{
+        Addr: serverIp + ":" + serverPort,
+        Handler: handler,
+        TLSConfig: tlsCfg}
+
+
   //Start API server
-	handler := cors.Default().Handler(router)
-	err := http.ListenAndServe(ServerIp + ":" + ServerPort, handler)
+  err = server.ListenAndServeTLS(serverCert, serverKey)
+	//handler := cors.Default().Handler(router)
+  //err = http.ListenAndServe(ServerIp + ":" + ServerPort, handler)
   log.Fatal(err)
 }

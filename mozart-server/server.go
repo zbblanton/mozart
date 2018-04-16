@@ -5,9 +5,9 @@ import(
 	//"os/exec"
 	//"fmt"
   //"io"
-  "flag"
+  //"flag"
   "bytes"
-	"log"
+	//"log"
 	//"strings"
   "fmt"
   "time"
@@ -44,10 +44,24 @@ type Containers struct {
   mux sync.Mutex
 }
 
-type Config struct {
+/*type Config struct {
   MasterPort string
   WorkerPort string
   WorkerJoinKey string
+  TempCurrentWorker uint
+  mux sync.Mutex
+}*/
+
+type Config struct {
+  Name string
+  ServerIp string
+  ServerPort string
+  AgentPort string
+  AgentJoinKey string
+  CaCert string
+  CaKey string
+  ServerCert string
+  ServerKey string
   TempCurrentWorker uint
   mux sync.Mutex
 }
@@ -113,10 +127,21 @@ type Resp struct {
 var counter = 1
 //var workers = []string{"10.0.0.33:8080", "10.0.0.67:8080"}
 
-var config = Config{
+/*var config = Config{
   MasterPort: "10200",
   WorkerPort: "10201",
-  WorkerJoinKey: "alkdfhghdfgdfflkjsdlkjhasdlkjhsdflkvdskjlsdakljasdfkh"}
+  WorkerJoinKey: "alkdfhghdfgdfflkjsdlkjhasdlkjhsdflkvdskjlsdakljasdfkh"}*/
+
+var config = Config{
+  Name: "testcluster1",
+  ServerIp: "10.0.0.28",
+  ServerPort: "8181",
+  AgentPort: "8080",
+  AgentJoinKey: "dasdasa2399dkdj91jdskf9011=0-d0-f90490djf",
+  CaCert: "./certs/ca.crt",
+  CaKey: "./certs/ca.key",
+  ServerCert: "./certs/server.crt",
+  ServerKey: "./certs/server.key"}
 
 var workers = Workers{
   Workers: make(map[string]Worker)}
@@ -194,6 +219,7 @@ func readFile(dataClass string, file string) {
 
 func selectWorker() Worker {
   //Simply spit out a worker for the time being
+  //There is a race condition here, need to add mux
   for _, worker := range workers.Workers {
     return worker
   }
@@ -243,13 +269,13 @@ func ContainersCreateVerification(c ContainerConfig) bool {
 }
 
 func main() {
-  serverPtr := flag.String("server", "", "IP of the server. (Required)")
-  flag.Parse()
+  //serverPtr := flag.String("server", "", "IP of the server. (Required)")
+  //flag.Parse()
   //Make sure server flag is given.
   //ADD VERIFICATION HERE TO CHECK IF VALID IP
-  if(*serverPtr == ""){
-    log.Fatal("Must provide a server.")
-  }
+  //if(*serverPtr == ""){
+  //  log.Fatal("Must provide a server.")
+  //}
 
   //Load/Create config data
   if _, err := os.Stat("/home/zbblanton/mozart/mozart-server/config.data"); os.IsNotExist(err) {
@@ -283,5 +309,5 @@ func main() {
   go controllerContainers()
 
   //Start API server
-  startApiServer(*serverPtr, "8181")
+  startApiServer(config.ServerIp, config.ServerPort, config.CaCert, config.ServerCert, config.ServerKey)
 }
