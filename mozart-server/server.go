@@ -138,10 +138,10 @@ var config = Config{
   ServerPort: "8181",
   AgentPort: "8080",
   AgentJoinKey: "dasdasa2399dkdj91jdskf9011=0-d0-f90490djf",
-  CaCert: "./certs/ca.crt",
-  CaKey: "./certs/ca.key",
-  ServerCert: "./certs/server.crt",
-  ServerKey: "./certs/server.key"}
+  CaCert: "../mozartctl/ca.crt",
+  CaKey: "../mozartctl/ca.key",
+  ServerCert: "../mozartctl/mozart-server.crt",
+  ServerKey: "../mozartctl/mozart-server.key"}
 
 var workers = Workers{
   Workers: make(map[string]Worker)}

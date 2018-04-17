@@ -177,7 +177,9 @@ func startApiServer(serverIp string, serverPort string, caCert string, serverCer
     panic("Cannot parse root CA.")
   }
   tlsCfg := &tls.Config{
-      RootCAs: rootCaPool}
+      RootCAs: rootCaPool,
+      ClientCAs: rootCaPool,
+      ClientAuth: tls.RequireAndVerifyClientCert}
 
   //Setup server config
   server := &http.Server{

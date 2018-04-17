@@ -4,6 +4,10 @@ import (
 	"log"
 	"os"
 	"fmt"
+	"crypto/tls"
+	"crypto/x509"
+	"io/ioutil"
+	"net/http"
 	//"flag"
 	"gopkg.in/urfave/cli.v1"
 )
@@ -20,11 +24,69 @@ func clusterCreate(c *cli.Context) {
 	if(c.String("server") == ""){
 		log.Fatal("Please provide the Mozart server address.")
 	}
+
+	fmt.Println("Creating Mozart CA...")
+  generateCaKeyPair("ca")
+  fmt.Println("Creating mozart-server keypair...")
+  generateSignedServerKeyPair()
+  fmt.Println("Creating client keypair...")
+  generateSignedClientKeyPair()
+
 	fmt.Println("Creating the", c.String("name"),"cluster for the Mozart server on", c.String("server") + ".")
 }
 
 func clusterList(c *cli.Context) {
-	fmt.Println("Feature not yet implemented.")
+	localCaFile := "ca.crt"
+	localCertFile := "mozart-client.crt"
+	localKeyFile := "mozart-client.key"
+
+	clientCert, err := tls.LoadX509KeyPair(localCertFile, localKeyFile)
+	if err != nil {
+		panic(err)
+	}
+
+	// Get the SystemCertPool, continue with an empty pool on error
+	rootCAs, _ := x509.SystemCertPool()
+	if rootCAs == nil {
+		rootCAs = x509.NewCertPool()
+	}
+
+	// Read in the cert file
+	certs, err := ioutil.ReadFile(localCaFile)
+	if err != nil {
+		log.Fatalf("Failed to append %q to RootCAs: %v", localCertFile, err)
+	}
+
+	// Append our cert to the system pool
+	if ok := rootCAs.AppendCertsFromPEM(certs); !ok {
+		log.Println("No certs appended, using system certs only")
+	}
+
+	// Trust the augmented cert pool in our client
+	config := &tls.Config{
+		InsecureSkipVerify: false,
+		RootCAs:            rootCAs,
+		Certificates: 			[]tls.Certificate{clientCert},
+	}
+	tr := &http.Transport{TLSClientConfig: config}
+	client := &http.Client{Transport: tr}
+
+	// Still works with host-trusted CAs!
+	req, err := http.NewRequest(http.MethodGet, "https://10.0.0.28:8181/", nil)
+	if err != nil {
+		panic(err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+	bodyStr := string(body)
+	fmt.Printf(bodyStr)
 }
 
 func serviceCreate(c *cli.Context) {
