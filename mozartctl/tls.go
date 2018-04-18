@@ -13,22 +13,24 @@ import (
 	"net"
 )
 
-func generateSignedServerKeyPair(){
-	generateSignedKeyPair("ca.crt", "ca.key", "mozart-server", "10.0.0.28")
+/*
+func generateSignedServerKeyPair(name string, server string){
+	generateSignedKeyPair(name + "-ca.crt", name + "-ca.key", name + "-server", server)
 }
 
 func generateSignedClientKeyPair(){
-	generateSignedKeyPair("ca.crt", "ca.key", "mozart-client", "10.0.0.10")
+	generateSignedKeyPair(name + "-ca.crt", name + "-ca.key", name + "-server", server)
 }
 
 func generateSignedAgentKeyPair(){
 
 }
+*/
 
 //Only supports 1 IP.  No multiple hostname or IP support yet.
 func generateSignedKeyPair(caCert string, caKey string, keyPairName string, ip string){
     // Load CA
-    catls, err := tls.LoadX509KeyPair(caCert, caKey)
+    catls, err := tls.LoadX509KeyPair(defaultSSLPath + caCert, defaultSSLPath + caKey)
     if err != nil {
         panic(err)
     }
@@ -54,11 +56,11 @@ func generateSignedKeyPair(caCert string, caKey string, keyPairName string, ip s
     // Sign the certificate
     cert_b, err := x509.CreateCertificate(rand.Reader, cert, ca, pub, catls.PrivateKey)
     // Public key
-    certOut, err := os.Create(keyPairName + ".crt")
+    certOut, err := os.Create(defaultSSLPath + keyPairName + ".crt")
     pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: cert_b})
     certOut.Close()
     // Private key
-    keyOut, err := os.OpenFile(keyPairName + ".key", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+    keyOut, err := os.OpenFile(defaultSSLPath + keyPairName + ".key", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
     pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
     keyOut.Close()
 }
@@ -84,12 +86,12 @@ func generateCaKeyPair(caPairName string) {
         return
     }
     // Public key
-    certOut, err := os.Create(caPairName + ".crt")
+    certOut, err := os.Create(defaultSSLPath + caPairName + ".crt")
     pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: ca_b})
     certOut.Close()
     log.Print("written cert.pem\n")
     // Private key
-    keyOut, err := os.OpenFile(caPairName + ".key", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+    keyOut, err := os.OpenFile(defaultSSLPath + caPairName + ".key", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
     pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
     keyOut.Close()
     log.Print("written key.pem\n")

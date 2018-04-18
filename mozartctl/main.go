@@ -6,33 +6,115 @@ import (
 	"fmt"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/rand"
 	"io/ioutil"
 	"net/http"
+	"encoding/json"
+	"encoding/base64"
 	//"flag"
 	"gopkg.in/urfave/cli.v1"
 )
+
+type Config struct {
+  Name string
+  ServerIp string
+  ServerPort string
+  AgentPort string
+  AgentJoinKey string
+  CaCert string
+  CaKey string
+  ServerCert string
+  ServerKey string
+}
+
+var defaultSSLPath = "/etc/mozart/ssl/"
+var defaultConfigPath = "/etc/mozart/"
+
+//taken from a google help pack
+//https://groups.google.com/forum/#!topic/golang-nuts/rmKTsGHPjlA
+func writeFile(file string, config Config){
+  f, err := os.Create(file)
+  if err != nil {
+    panic("cant open file")
+  }
+  defer f.Close()
+
+  enc := json.NewEncoder(f)
+	enc.SetIndent("", "    ")
+  err = enc.Encode(config)
+  if err != nil {
+    panic("cant encode")
+  }
+}
+
+func readFile(file string, config Config) {
+  if _, err := os.Stat(file); os.IsNotExist(err) {
+    f, err := os.OpenFile(file, os.O_CREATE|os.O_RDONLY, 0644)
+    if err != nil {
+      panic("cant create file")
+    }
+    defer f.Close()
+  } else {
+    f, err := os.OpenFile(file, os.O_CREATE|os.O_RDONLY, 0644)
+    if err != nil {
+      panic("cant open file")
+    }
+    defer f.Close()
+
+    enc := json.NewDecoder(f)
+    err = enc.Decode(&config)
+    if err != nil {
+      panic("cant decode")
+    }
+  }
+}
 
 func clusterSwitch(c *cli.Context) {
 	fmt.Println("Feature not yet implemented.")
 }
 
 func clusterCreate(c *cli.Context) {
-	if(c.String("name") == ""){
+	name := c.String("name")
+	server := c.String("server")
+	if(name == ""){
 		log.Fatal("Please provide a name for the server.")
 	}
 
-	if(c.String("server") == ""){
+	if(server == ""){
 		log.Fatal("Please provide the Mozart server address.")
 	}
 
 	fmt.Println("Creating Mozart CA...")
-  generateCaKeyPair("ca")
-  fmt.Println("Creating mozart-server keypair...")
-  generateSignedServerKeyPair()
+  generateCaKeyPair(name + "-ca")
+  fmt.Println("Creating server keypair...")
+	generateSignedKeyPair(name + "-ca.crt", name + "-ca.key", name + "-server", server)
   fmt.Println("Creating client keypair...")
-  generateSignedClientKeyPair()
+	generateSignedKeyPair(name + "-ca.crt", name + "-ca.key", name + "-client", server)
 
-	fmt.Println("Creating the", c.String("name"),"cluster for the Mozart server on", c.String("server") + ".")
+	//Generate worker join key
+	randKey := make([]byte, 128)
+  _, err := rand.Read(randKey)
+  if err != nil {
+    fmt.Println("Error generating a new worker key, we are going to exit here due to possible system errors.")
+    os.Exit(1)
+  }
+  joinKey := base64.URLEncoding.EncodeToString(randKey)
+
+	//Create config file
+	config := Config{
+	  Name: name,
+	  ServerIp: server,
+	  ServerPort: "8181",
+	  AgentPort: "8080",
+	  AgentJoinKey: joinKey,
+	  CaCert: defaultSSLPath + name + "-ca.crt",
+	  CaKey: defaultSSLPath + name + "-ca.key",
+	  ServerCert: defaultSSLPath + name + "-server.crt",
+	  ServerKey: defaultSSLPath + name + "-server.key",
+	}
+	writeFile(defaultConfigPath + name + "-config.json", config)
+
+
 }
 
 func clusterList(c *cli.Context) {
