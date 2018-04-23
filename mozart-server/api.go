@@ -21,6 +21,46 @@ func RootHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Hi there :)\n"))
 }
 
+func NodeInitialJoinHandler(w http.ResponseWriter, r *http.Request) {
+  w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+  w.WriteHeader(http.StatusOK)
+  defer r.Body.Close()
+
+  j := NodeInitialJoinReq{}
+  json.NewDecoder(r.Body).Decode(&j)
+
+  //Verify key
+  if(j.JoinKey != config.AgentJoinKey){
+    fmt.Println(config.AgentJoinKey)
+    fmt.Println(j.JoinKey)
+    resp := NodeJoinResp{ServerKey: "", Success: false, Error: "Invalid join key"}
+    json.NewEncoder(w).Encode(resp)
+    return
+  }
+
+  //Decode the CSR from base64
+  csr, err := base64.URLEncoding.DecodeString(j.Csr)
+  if err != nil {
+      panic(err)
+  }
+
+  //Sign the CSR
+  signedCert, err := signCSR(config.CaCert, config.CaKey, csr, j.AgentIp)
+
+  //Prepare signed cert to be sent to agent
+  signedCertString := base64.URLEncoding.EncodeToString(signedCert)
+
+  //Prepare CA to be sent to agent
+  ca, err := ioutil.ReadFile(config.CaCert)
+  if err != nil {
+    panic("cant open file")
+  }
+  caString := base64.URLEncoding.EncodeToString(ca)
+
+  resp := NodeInitialJoinResp{caString, signedCertString, true, ""}
+  json.NewEncoder(w).Encode(resp)
+}
+
 func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "application/json; charset=UTF-8")
   w.WriteHeader(http.StatusOK)
@@ -143,6 +183,22 @@ func ContainersListWorkersHandler(w http.ResponseWriter, r *http.Request) {
 
   resp := c
   json.NewEncoder(w).Encode(resp)
+}
+
+func startJoinServer(serverIp string, joinPort string, caCert string, serverCert string, serverKey string){
+  router := mux.NewRouter().StrictSlash(true)
+	router.HandleFunc("/", NodeInitialJoinHandler)
+  handler := cors.Default().Handler(router)
+
+  //Setup server config
+  server := &http.Server{
+        Addr: serverIp + ":" + joinPort,
+        Handler: handler}
+
+  //Start Join server
+  fmt.Println("Starting join server...")
+  err := server.ListenAndServeTLS(serverCert, serverKey)
+  log.Fatal(err)
 }
 
 func startApiServer(serverIp string, serverPort string, caCert string, serverCert string, serverKey string) {

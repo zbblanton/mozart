@@ -7,6 +7,8 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/rand"
+	"crypto/sha256"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"encoding/json"
@@ -67,6 +69,21 @@ func readFile(file string, config Config) {
       panic("cant decode")
     }
   }
+}
+
+func generateSha256(file string) string{
+	f, err := os.Open(file)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		log.Fatal(err)
+	}
+
+	return base64.URLEncoding.EncodeToString(h.Sum(nil))
 }
 
 func clusterSwitch(c *cli.Context) {
@@ -144,7 +161,7 @@ func clusterList(c *cli.Context) {
 		log.Println("No certs appended, using system certs only")
 	}
 
-	// Trust the augmented cert pool in our client
+	// Trust cert pool in our client
 	config := &tls.Config{
 		InsecureSkipVerify: false,
 		RootCAs:            rootCAs,

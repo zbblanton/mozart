@@ -15,6 +15,14 @@ import(
   "encoding/gob"
 	"encoding/json"
 	"net/http"
+  "crypto/rand"
+  "crypto/tls"
+  "crypto/x509"
+  "crypto/x509/pkix"
+  "math/big"
+  "net"
+  "encoding/pem"
+  "io/ioutil"
 	//"github.com/rs/cors"
 )
 
@@ -89,6 +97,19 @@ type ContainerConfig struct {
 	Privileged bool
 }
 
+type NodeInitialJoinReq struct {
+  AgentIp string
+  JoinKey string
+  Csr string
+}
+
+type NodeInitialJoinResp struct {
+  CaCert string
+  ClientCert string
+  Success bool `json:"success"`
+  Error string `json:"error"`
+}
+
 type NodeJoinReq struct {
   JoinKey string
   AgentKey string
@@ -132,16 +153,18 @@ var counter = 1
   WorkerPort: "10201",
   WorkerJoinKey: "alkdfhghdfgdfflkjsdlkjhasdlkjhsdflkvdskjlsdakljasdfkh"}*/
 
+
 var config = Config{
   Name: "testcluster1",
   ServerIp: "10.0.0.28",
   ServerPort: "8181",
   AgentPort: "8080",
-  AgentJoinKey: "dasdasa2399dkdj91jdskf9011=0-d0-f90490djf",
-  CaCert: "../mozartctl/ca.crt",
-  CaKey: "../mozartctl/ca.key",
-  ServerCert: "../mozartctl/mozart-server.crt",
-  ServerKey: "../mozartctl/mozart-server.key"}
+  AgentJoinKey: "DbWZo9IWkT7ALmeXAYlnAjcQOf_PukhFdjda7orv6CsrWtZ1ylBhhEchBEPeJUKAzi5kEvCAZTb7sii5VCv-gMxhpPquvTWjvRQYjLPfwR6WP0oru2gr6gBAxRPuUN0KOHC8OUTIc7PszDheiZOxg1qza_hupJt8_Pzww1xPEwM=",
+  CaCert: "/etc/mozart/ssl/testcluster1-ca.crt",
+  CaKey: "/etc/mozart/ssl/testcluster1-ca.key",
+  ServerCert: "/etc/mozart/ssl/testcluster1-server.crt",
+  ServerKey: "/etc/mozart/ssl/testcluster1-server.key"}
+
 
 var workers = Workers{
   Workers: make(map[string]Worker)}
@@ -238,7 +261,58 @@ func checkWorkerHealth(workerIp string, workerPort string) bool {
 
   b := new(bytes.Buffer)
   json.NewEncoder(b).Encode(j)
-  url := "http://" + workerIp + ":" + workerPort + "/health"
+  url := "https://" + workerIp + ":" + workerPort + "/health"
+
+
+
+
+
+  //The following code will allow for TLS auth, we will need to create a function for this later.
+  //-----Start-------
+  //Load our key pair
+  clientKeyPair, err := tls.LoadX509KeyPair(config.ServerCert, config.ServerKey)
+	if err != nil {
+		panic(err)
+	}
+
+  //Load CA
+  rootCa, err := ioutil.ReadFile(config.CaCert)
+  if err != nil {
+    panic("cant open file")
+  }
+
+  //Create a new cert pool
+	rootCAs := x509.NewCertPool()
+
+	// Append our ca cert to the system pool
+	if ok := rootCAs.AppendCertsFromPEM(rootCa); !ok {
+		fmt.Println("No certs appended, using system certs only")
+	}
+
+  // Trust cert pool in our client
+	clientConfig := &tls.Config{
+		InsecureSkipVerify: false,
+		RootCAs:            rootCAs,
+		Certificates: 			[]tls.Certificate{clientKeyPair},
+	}
+	clientTr := &http.Transport{TLSClientConfig: clientConfig}
+	secureClient := &http.Client{Transport: clientTr, Timeout: time.Second * 5}
+
+	// Still works with host-trusted CAs!
+	req, err := http.NewRequest(http.MethodPost, url, b)
+	if err != nil {
+		panic(err)
+	}
+	resp, err := secureClient.Do(req)
+	if err != nil {
+		fmt.Println(err)
+    return false
+	}
+	defer resp.Body.Close()
+  //-----End-------
+
+
+/*
   //Added the client code so that we can have a short timeout.
   var client = &http.Client{
     Timeout: time.Second * 5,
@@ -247,7 +321,7 @@ func checkWorkerHealth(workerIp string, workerPort string) bool {
   if err != nil {
     return false
   }
-
+*/
   type healthCheckResp struct {
     Health string
     Success bool
@@ -256,7 +330,7 @@ func checkWorkerHealth(workerIp string, workerPort string) bool {
 
   respj := healthCheckResp{}
   json.NewDecoder(resp.Body).Decode(&respj)
-  resp.Body.Close()
+  //resp.Body.Close()
   if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
     return true
   }
@@ -266,6 +340,46 @@ func checkWorkerHealth(workerIp string, workerPort string) bool {
 
 func ContainersCreateVerification(c ContainerConfig) bool {
   return true
+}
+
+//Only supports 1 IP.  No multiple hostname or IP support yet.
+func signCSR(caCert string, caKey string, csr []byte, ip string) (cert []byte, err error){
+    //Load CA
+    catls, err := tls.LoadX509KeyPair(config.CaCert, config.CaKey)
+    if err != nil {
+        panic(err)
+    }
+    ca, err := x509.ParseCertificate(catls.Certificate[0])
+    if err != nil {
+        panic(err)
+    }
+    //Prepare certificate
+    newCert := &x509.Certificate{
+        SerialNumber: big.NewInt(1658),
+        Subject: pkix.Name{
+            Organization:  []string{"Mozart"},
+        },
+        NotBefore:    time.Now(),
+        NotAfter:     time.Now().AddDate(10, 0, 0),
+        SubjectKeyId: []byte{1, 2, 3, 4, 6},
+    		IPAddresses:  []net.IP{net.ParseIP(ip)},
+        ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+        KeyUsage:     x509.KeyUsageDigitalSignature,
+    }
+
+    //Parse the CSR
+    clientCSR, err := x509.ParseCertificateRequest(csr)
+    if err != nil {
+        panic(err)
+    }
+
+    //Sign the certificate
+    certSigned, err := x509.CreateCertificate(rand.Reader, newCert, ca, clientCSR.PublicKey, catls.PrivateKey)
+
+    //Public key
+    cert = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certSigned})
+
+    return cert, nil
 }
 
 func main() {
@@ -309,5 +423,14 @@ func main() {
   go controllerContainers()
 
   //Start API server
-  startApiServer(config.ServerIp, config.ServerPort, config.CaCert, config.ServerCert, config.ServerKey)
+  fmt.Println("Starting API server...")
+  go startApiServer(config.ServerIp, config.ServerPort, config.CaCert, config.ServerCert, config.ServerKey)
+
+  //Start join server
+  fmt.Println("Starting join server...")
+  go startJoinServer(config.ServerIp, "8282", config.CaCert, config.ServerCert, config.ServerKey)
+
+  for ;; {
+    time.Sleep(time.Duration(15) * time.Second)
+  }
 }
