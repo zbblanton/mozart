@@ -159,7 +159,7 @@ var config = Config{
   ServerIp: "10.0.0.28",
   ServerPort: "8181",
   AgentPort: "8080",
-  AgentJoinKey: "DbWZo9IWkT7ALmeXAYlnAjcQOf_PukhFdjda7orv6CsrWtZ1ylBhhEchBEPeJUKAzi5kEvCAZTb7sii5VCv-gMxhpPquvTWjvRQYjLPfwR6WP0oru2gr6gBAxRPuUN0KOHC8OUTIc7PszDheiZOxg1qza_hupJt8_Pzww1xPEwM=",
+  AgentJoinKey: "jqzWM6_fztyapwkGF7rSg5giqwag3fFuBBauyEEo9HL62pTwDegRyojhFpWsriwip6yF2-RTihTREz2mlwt5bet8IA4SB8jN3427GvOCWWPXqsBmrOyvOhzpwV5j-joPZEHgI8e9VfQXwHKwVcchPEv5dWgRHB39olVsdur65yA=",
   CaCert: "/etc/mozart/ssl/testcluster1-ca.crt",
   CaKey: "/etc/mozart/ssl/testcluster1-ca.key",
   ServerCert: "/etc/mozart/ssl/testcluster1-server.crt",

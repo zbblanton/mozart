@@ -131,7 +131,14 @@ func clusterCreate(c *cli.Context) {
 	}
 	writeFile(defaultConfigPath + name + "-config.json", config)
 
+	//Generate hash
+	caHash := generateSha256(defaultSSLPath + name + "-ca.crt")
 
+	fmt.Printf("\n\n\n")
+	fmt.Println("Once the server has been set up, add workers by running this command:")
+	fmt.Printf("mozart-agent --server=%s --agent=INSERT_AGENT_IP --key=%s --ca-hash=%s", server, joinKey, caHash)
+	//fmt.Printf("mozart-agent --server=", server, "agent=INSERT_AGENT_IP --key=", joinKey, "--ca-hash=", caHash)
+	fmt.Printf("\n\n\n")
 }
 
 func clusterList(c *cli.Context) {
