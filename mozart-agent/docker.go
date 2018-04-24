@@ -39,8 +39,8 @@ func DockerCallRuntimeApi(method string, url string, body io.Reader) (respBody [
   }
 
   client := &http.Client{Transport: tr}
-  b := new(bytes.Buffer)
-  json.NewEncoder(b).Encode(body)
+  b := new(bytes.Buffer) //I dont think we need this line
+  json.NewEncoder(b).Encode(body) //and this line, If you look the functions that call this function already encode the body...
   req, err := http.NewRequest(method, url, body)
   req.Header.Set("Content-Type", "application/json")
   resp, err := client.Do(req)

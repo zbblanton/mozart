@@ -10,7 +10,11 @@ import(
 	"crypto/x509/pkix"
   "crypto/rand"
   "crypto/rsa"
-  "encoding/pem"
+  "crypto/tls"
+  "net/http"
+  "bufio"
+  "io/ioutil"
+  "io"
 )
 
 type ExposedPort struct {
@@ -108,10 +112,31 @@ func getContainerRuntime() string {
   return "docker"
 }
 
-func generatePrivateKey() []byte {
-  priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-  key := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
-  return key
+func callInsecuredServer(method string, url string, body io.Reader) (respBody []byte, err error)  {
+  c := &tls.Config{
+		InsecureSkipVerify: true,
+	}
+	tr := &http.Transport{TLSClientConfig: c}
+	client := &http.Client{Transport: tr}
+
+  req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+  resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+  reader := bufio.NewReader(resp.Body)
+  respBody, _ = ioutil.ReadAll(reader)
+  resp.Body.Close()
+
+  return respBody, nil
+}
+
+func callSecuredServer(){
+
 }
 
 func generateCSR(privateKey *rsa.PrivateKey, Ip string) (csr []byte, err error) {
