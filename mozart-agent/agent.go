@@ -6,6 +6,11 @@ import(
   "sync"
   "flag"
 	"log"
+  "crypto/x509"
+	"crypto/x509/pkix"
+  "crypto/rand"
+  "crypto/rsa"
+  "encoding/pem"
 )
 
 type ExposedPort struct {
@@ -101,6 +106,29 @@ func fakeDial(proto, addr string) (conn net.Conn, err error) {
 
 func getContainerRuntime() string {
   return "docker"
+}
+
+func generatePrivateKey() []byte {
+  priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+  key := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
+  return key
+}
+
+func generateCSR(privateKey *rsa.PrivateKey, Ip string) (csr []byte, err error) {
+  //CSR config
+  csrSubject := pkix.Name{
+      Organization:  []string{"Mozart"}}
+  csrConfig := &x509.CertificateRequest{
+    Subject: csrSubject,
+    PublicKey: privateKey,
+    IPAddresses:  []net.IP{net.ParseIP(Ip)}}
+
+  csr, err = x509.CreateCertificateRequest(rand.Reader, csrConfig, privateKey)
+  if err != nil {
+		return nil, err
+	}
+
+  return csr, err
 }
 
 var config = Config{ServerKey: ""}

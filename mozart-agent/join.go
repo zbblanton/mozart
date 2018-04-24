@@ -2,7 +2,6 @@ package main
 
 import(
   "os"
-  "net"
   "bytes"
   "fmt"
 	"log"
@@ -13,7 +12,6 @@ import(
   "crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
   "crypto/sha256"
   "encoding/pem"
 )
@@ -27,16 +25,10 @@ func joinAgent(serverIp string, agentIp string, joinKey string, agentCaHash stri
   //Step 1
   fmt.Println("Starting Join Process...")
   fmt.Println("Generating Private Key...")
-  priv, _ := rsa.GenerateKey(rand.Reader, 2048)
-  agentTlsKey = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)}) //Save the private key
-  csrSubject := pkix.Name{
-      Organization:  []string{"Mozart"}}
-  csrConfig := &x509.CertificateRequest{
-    Subject: csrSubject,
-    PublicKey: priv,
-    IPAddresses:  []net.IP{net.ParseIP(agentIp)}}
+  privateKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+  agentTlsKey = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
   fmt.Println("Generating CSR...")
-  csr, err := x509.CreateCertificateRequest(rand.Reader, csrConfig, priv)
+  csr, err := generateCSR(privateKey, agentIp)
   if err != nil {
 		panic(err)
 	}
