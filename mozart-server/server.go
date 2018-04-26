@@ -4,11 +4,12 @@ import(
   "os"
 	//"os/exec"
 	//"fmt"
-  //"io"
+  "io"
   //"flag"
   "bytes"
-	//"log"
+	"log"
 	//"strings"
+  "bufio"
   "fmt"
   "time"
   "sync"
@@ -23,6 +24,7 @@ import(
   "net"
   "encoding/pem"
   "io/ioutil"
+  "errors"
 	//"github.com/rs/cors"
 )
 
@@ -171,6 +173,10 @@ var workers = Workers{
 
 var containers = Containers{
   Containers: make(map[string]Container)}
+
+var serverTlsCert = []byte{}
+var serverTlsKey = []byte{}
+var caTlsCert = []byte{}
 
 /*
 func (c *Config) AddContainer(newContainer Container) {
@@ -382,6 +388,46 @@ func signCSR(caCert string, caKey string, csr []byte, ip string) (cert []byte, e
     return cert, nil
 }
 
+func callSecuredAgent(pubKey, privKey, ca []byte, method string, url string, body io.Reader) (respBody []byte, err error)  {
+  //Load our key pair
+  clientKeyPair, err := tls.X509KeyPair(pubKey, privKey)
+  if err != nil {
+    panic(err)
+  }
+
+  //Create a new cert pool
+  rootCAs := x509.NewCertPool()
+
+  // Append our ca cert to the system pool
+  if ok := rootCAs.AppendCertsFromPEM(ca); !ok {
+    log.Println("No certs appended, using system certs only")
+  }
+
+  // Trust cert pool in our client
+  clientConfig := &tls.Config{
+    InsecureSkipVerify: false,
+    RootCAs:            rootCAs,
+    Certificates: 			[]tls.Certificate{clientKeyPair},
+  }
+  clientTr := &http.Transport{TLSClientConfig: clientConfig}
+  secureClient := &http.Client{Transport: clientTr}
+
+  // Still works with host-trusted CAs!
+  req, err := http.NewRequest(http.MethodPost, url, body)
+  if err != nil {
+    panic(err)
+  }
+  resp, err := secureClient.Do(req)
+  if err != nil {
+    panic(err)
+  }
+  reader := bufio.NewReader(resp.Body)
+  respBody, _ = ioutil.ReadAll(reader)
+  resp.Body.Close()
+
+  return respBody, nil
+}
+
 func main() {
   //serverPtr := flag.String("server", "", "IP of the server. (Required)")
   //flag.Parse()
@@ -418,6 +464,21 @@ func main() {
 		readFile("containers", "containers.data")
   }
 
+  //Load Certs into memory
+  err := errors.New("")
+  serverTlsCert, err = ioutil.ReadFile(config.ServerCert)
+  if err != nil {
+    panic(err)
+  }
+  serverTlsKey, err = ioutil.ReadFile(config.ServerKey)
+  if err != nil {
+    panic(err)
+  }
+  caTlsCert, err = ioutil.ReadFile(config.CaCert)
+  if err != nil {
+    panic(err)
+  }
+
   //Start subprocesses
   go monitorWorkers()
   go controllerContainers()
@@ -430,7 +491,11 @@ func main() {
   fmt.Println("Starting join server...")
   go startJoinServer(config.ServerIp, "8282", config.CaCert, config.ServerCert, config.ServerKey)
 
-  for ;; {
-    time.Sleep(time.Duration(15) * time.Second)
-  }
+  //Bad
+  //Bad
+  for ;; { //Bad
+    time.Sleep(time.Duration(15) * time.Second) //Bad
+  } //Bad
+  //Bad
+  //Bad
 }

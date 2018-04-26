@@ -6,7 +6,7 @@ import(
   "time"
   "bytes"
   "encoding/json"
-  "net/http"
+  //"net/http"
 )
 
 func controllerContainersStart(c Container){
@@ -20,11 +20,27 @@ func controllerContainersStart(c Container){
 
   b := new(bytes.Buffer)
   json.NewEncoder(b).Encode(j)
-  url := "http://" + c.Worker + ":8080" + "/create"
-  _, err := http.Post(url, "application/json; charset=utf-8", b)
+  url := "https://" + c.Worker + ":8080" + "/create"
+
+  _, err := callSecuredAgent(serverTlsCert, serverTlsKey, caTlsCert, "POST", url, b)
   if err != nil {
-      panic(err)
+		panic(err)
+	}
+}
+
+func controllerContainersStop(c Container){
+  //Will need to add support for the worker key!!!!!
+  type CreateReq struct {
+    Key string
+    Container ContainerConfig
   }
+
+  url := "https://" + c.Worker + ":8080" + "/stop/" + c.Name
+
+  _, err := callSecuredAgent(serverTlsCert, serverTlsKey, caTlsCert, "GET", url, nil)
+  if err != nil {
+		panic(err)
+	}
 }
 
 func controllerContainers() {
@@ -40,6 +56,14 @@ func controllerContainers() {
           //Below we assume that the containers actually start and put in a running state. Will need to add actual checks.
           controllerContainersStart(container)
           container.State = "running"
+          containers.Containers[key] = container
+          writeFile("containers", "containers.data")
+          fmt.Print(container)
+        } else if(container.DesiredState == "stopped"){
+          //Run function to start a container
+          //Below we assume that the containers actually start and put in a running state. Will need to add actual checks.
+          controllerContainersStop(container)
+          container.State = "stopped"
           containers.Containers[key] = container
           writeFile("containers", "containers.data")
           fmt.Print(container)

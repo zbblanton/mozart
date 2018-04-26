@@ -1,5 +1,7 @@
 package main
 
+import "errors"
+
 //Used to schedule actions such as creating or deleting a container
 func schedulerCreateContainer(c ContainerConfig) {
   worker := selectWorker()
@@ -15,4 +17,20 @@ func schedulerCreateContainer(c ContainerConfig) {
   containers.Containers[c.Name] = newContainer
   writeFile("containers", "containers.data")
   containers.mux.Unlock()
+}
+
+func schedulerStopContainer(containerName string) (err error){
+  containers.mux.Lock()
+  if _, ok := containers.Containers[containerName]; !ok {
+    err = errors.New("Container does not exist.")
+  } else {
+    container := containers.Containers[containerName]
+    container.DesiredState = "stopped"
+    containers.Containers[containerName] = container
+    writeFile("containers", "containers.data")    
+  }
+
+  containers.mux.Unlock()
+
+  return err
 }

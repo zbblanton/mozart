@@ -74,6 +74,7 @@ func StopHandler(w http.ResponseWriter, r *http.Request) {
   containerName := vars["container"]
 
   if(containerName != ""){
+    fmt.Println("Stopping container: ", containerName)
     DockerStopContainer(containerName)
     p := Resp{true, ""}
     json.NewEncoder(w).Encode(p)

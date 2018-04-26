@@ -135,8 +135,44 @@ func callInsecuredServer(method string, url string, body io.Reader) (respBody []
   return respBody, nil
 }
 
-func callSecuredServer(){
+func callSecuredServer(pubKey, privKey, ca []byte, method string, url string, body io.Reader) (respBody []byte, err error)  {
+  //Load our key pair
+  clientKeyPair, err := tls.X509KeyPair(pubKey, privKey)
+  if err != nil {
+    panic(err)
+  }
 
+  //Create a new cert pool
+  rootCAs := x509.NewCertPool()
+
+  // Append our ca cert to the system pool
+  if ok := rootCAs.AppendCertsFromPEM(ca); !ok {
+    log.Println("No certs appended, using system certs only")
+  }
+
+  // Trust cert pool in our client
+  clientConfig := &tls.Config{
+    InsecureSkipVerify: false,
+    RootCAs:            rootCAs,
+    Certificates: 			[]tls.Certificate{clientKeyPair},
+  }
+  clientTr := &http.Transport{TLSClientConfig: clientConfig}
+  secureClient := &http.Client{Transport: clientTr}
+
+  // Still works with host-trusted CAs!
+  req, err := http.NewRequest(http.MethodPost, url, body)
+  if err != nil {
+    panic(err)
+  }
+  resp, err := secureClient.Do(req)
+  if err != nil {
+    panic(err)
+  }
+  reader := bufio.NewReader(resp.Body)
+  respBody, _ = ioutil.ReadAll(reader)
+  resp.Body.Close()
+
+  return respBody, nil
 }
 
 func generateCSR(privateKey *rsa.PrivateKey, Ip string) (csr []byte, err error) {

@@ -15,6 +15,8 @@ import (
 	"encoding/base64"
 	//"flag"
 	"gopkg.in/urfave/cli.v1"
+	"bufio"
+	"github.com/olekukonko/tablewriter"
 )
 
 type Config struct {
@@ -29,8 +31,23 @@ type Config struct {
   ServerKey string
 }
 
-var defaultSSLPath = "/etc/mozart/ssl/"
-var defaultConfigPath = "/etc/mozart/"
+type Container struct {
+	Name string
+	State string
+	DesiredState string
+	Worker string
+}
+
+type ContainerListResp struct {
+	Containers map[string]Container
+	Success bool
+	Error string
+}
+
+type Resp struct {
+  Success bool `json:"success"`
+  Error string `json:"error"`
+}
 
 //taken from a google help pack
 //https://groups.google.com/forum/#!topic/golang-nuts/rmKTsGHPjlA
@@ -49,26 +66,64 @@ func writeFile(file string, config Config){
   }
 }
 
-func readFile(file string, config Config) {
-  if _, err := os.Stat(file); os.IsNotExist(err) {
-    f, err := os.OpenFile(file, os.O_CREATE|os.O_RDONLY, 0644)
-    if err != nil {
-      panic("cant create file")
-    }
-    defer f.Close()
-  } else {
-    f, err := os.OpenFile(file, os.O_CREATE|os.O_RDONLY, 0644)
-    if err != nil {
-      panic("cant open file")
-    }
-    defer f.Close()
-
-    enc := json.NewDecoder(f)
-    err = enc.Decode(&config)
-    if err != nil {
-      panic("cant decode")
-    }
+func readConfigFile(file string) {
+  f, err := os.Open(file)
+  if err != nil {
+    panic("cant open file")
   }
+  defer f.Close()
+
+  enc := json.NewDecoder(f)
+  err = enc.Decode(&config)
+  if err != nil {
+    panic("cant decode")
+  }
+}
+
+func callSecuredServer(pubKey, privKey, ca string, method string, url string, body io.Reader) (respBody []byte, err error)  {
+  //Load our key pair
+  clientKeyPair, err := tls.LoadX509KeyPair(pubKey, privKey)
+  if err != nil {
+    panic(err)
+  }
+
+	//Load CA
+  rootCa, err := ioutil.ReadFile(ca)
+  if err != nil {
+    panic(err)
+  }
+
+  //Create a new cert pool
+  rootCAs := x509.NewCertPool()
+
+  // Append our ca cert to the system pool
+  if ok := rootCAs.AppendCertsFromPEM(rootCa); !ok {
+    log.Println("No certs appended, using system certs only")
+  }
+
+  // Trust cert pool in our client
+  clientConfig := &tls.Config{
+    InsecureSkipVerify: false,
+    RootCAs:            rootCAs,
+    Certificates: 			[]tls.Certificate{clientKeyPair},
+  }
+  clientTr := &http.Transport{TLSClientConfig: clientConfig}
+  secureClient := &http.Client{Transport: clientTr}
+
+  // Still works with host-trusted CAs!
+  req, err := http.NewRequest(http.MethodPost, url, body)
+  if err != nil {
+    panic(err)
+  }
+  resp, err := secureClient.Do(req)
+  if err != nil {
+    panic(err)
+  }
+  reader := bufio.NewReader(resp.Body)
+  respBody, _ = ioutil.ReadAll(reader)
+  resp.Body.Close()
+
+  return respBody, nil
 }
 
 func generateSha256(file string) string{
@@ -207,7 +262,91 @@ func serviceList(c *cli.Context) {
 	fmt.Println("Feature not yet implemented.")
 }
 
+func containerRun(c *cli.Context) {
+	configPath := c.String("config")
+	if(configPath == ""){
+		configPath = "config.json"
+	}
+
+	f, err := os.Open(configPath)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	configReader := bufio.NewReader(f)
+
+	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/containers/create"
+	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "POST", url, configReader)
+  if err != nil {
+		panic(err)
+	}
+
+	respBody := Resp{}
+  err = json.Unmarshal(resp, &respBody)
+	if err != nil {
+		panic(err)
+	}
+
+	if(!respBody.Success){
+		panic(respBody.Error)
+	}
+}
+
+func containerStop(c *cli.Context) {
+	if(c.Args().First() == ""){
+		panic("Must provide the name or id of the container.")
+	}
+
+	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/containers/stop/" + c.Args().First()
+	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "GET", url, nil)
+  if err != nil {
+		panic(err)
+	}
+
+	respBody := Resp{}
+  err = json.Unmarshal(resp, &respBody)
+	if err != nil {
+		panic(err)
+	}
+
+	if(!respBody.Success){
+		panic(respBody.Error)
+	}
+}
+
+func containerList(c *cli.Context) {
+	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/containers/list"
+	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "GET", url, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	respBody := ContainerListResp{}
+	err = json.Unmarshal(resp, &respBody)
+	if err != nil {
+		panic(err)
+	}
+
+	if(!respBody.Success){
+		panic(respBody.Error)
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"Name", "State", "Desired State", "Worker"})
+	for _, c := range respBody.Containers {
+	   table.Append([]string{c.Name, c.State, c.DesiredState, c.Worker})
+	}
+	table.Render() // Send output
+}
+
+var defaultSSLPath = "/etc/mozart/ssl/"
+var defaultConfigPath = "/etc/mozart/"
+var config = Config{}
+
 func main() {
+	readConfigFile("/etc/mozart/testcluster1-config.json")
+
 	app := cli.NewApp()
 	app.Name = "mozartctl"
 	app.Usage = "CLI for Mozart clusters."
@@ -234,6 +373,21 @@ func main() {
 					Action: clusterList,
 				},
 			},
+		},
+		{
+			Name:  "run",
+			Usage: "Schedules a container to be created and started.",
+			Action: containerRun,
+		},
+		{
+			Name:  "stop",
+			Usage: "Schedules a container to be stopped.",
+			Action: containerStop,
+		},
+		{
+			Name:  "ls",
+			Usage: "List all containers in a cluster.",
+			Action: containerList,
 		},
 	}
 

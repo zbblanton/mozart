@@ -117,13 +117,37 @@ func ContainersCreateHandler(w http.ResponseWriter, r *http.Request) {
   j := ContainerConfig{}
   json.NewDecoder(r.Body).Decode(&j)
   if(ContainersCreateVerification(j)){
-      go schedulerCreateContainer(j)
+      fmt.Println("Received a run request for config: ", j)
+      schedulerCreateContainer(j)
       resp := Resp{true, ""}
       json.NewEncoder(w).Encode(resp)
   }else {
       resp := Resp{false, "Invalid data"} //Add better error.
       json.NewEncoder(w).Encode(resp)
   }
+}
+
+func ContainersStopHandler(w http.ResponseWriter, r *http.Request) {
+  w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+  w.WriteHeader(http.StatusOK)
+  defer r.Body.Close()
+
+  vars := mux.Vars(r)
+  containerName := vars["container"]
+  if(containerName == ""){
+    resp := Resp{false, "Must provide a container name."}
+    json.NewEncoder(w).Encode(resp)
+    return
+  }
+
+  err :=schedulerStopContainer(containerName)
+  if err != nil {
+    resp := Resp{false, "Cannot find container"}
+    json.NewEncoder(w).Encode(resp)
+    return
+  }
+  resp := Resp{true, ""}
+  json.NewEncoder(w).Encode(resp)
 }
 
 func ContainersStateUpdateHandler(w http.ResponseWriter, r *http.Request) {
@@ -206,7 +230,7 @@ func startApiServer(serverIp string, serverPort string, caCert string, serverCer
 	router.HandleFunc("/", RootHandler)
 
   router.HandleFunc("/containers/create", ContainersCreateHandler)
-  router.HandleFunc("/containers/stop/{container}", RootHandler)
+  router.HandleFunc("/containers/stop/{container}", ContainersStopHandler)
   router.HandleFunc("/containers/list", ContainersListHandler)
   router.HandleFunc("/containers/list/{worker}", ContainersListWorkersHandler)
   router.HandleFunc("/containers/{container}/state/update", ContainersStateUpdateHandler)

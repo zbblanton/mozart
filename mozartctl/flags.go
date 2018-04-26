@@ -14,4 +14,9 @@ var (
 		Name:   "server",
 		Usage:  "Address of the Mozart server.",
 	}
+
+	flagRunConfig = cli.StringFlag{
+		Name:   "config",
+		Usage:  "Container config file.",
+	}
 )
