@@ -5,7 +5,7 @@ import(
 	//"os/exec"
 	//"fmt"
   "io"
-  //"flag"
+  "flag"
   "bytes"
 	"log"
 	//"strings"
@@ -132,16 +132,22 @@ type ContainerListResp struct {
   Error string `json:"error"`
 }
 
+type NodeListResp struct {
+  Workers map[string]Worker
+  Success bool `json:"success"`
+  Error string `json:"error"`
+}
+
 type ContainerInspectResp struct {
   Success bool `json:"success"`
   Error string `json:"error"`
 }
-
+/*
 type NodeListResp struct {
   Success bool `json:"success"`
   Error string `json:"error"`
 }
-
+*/
 type Resp struct {
   Success bool `json:"success"`
   Error string `json:"error"`
@@ -155,8 +161,9 @@ var counter = 1
   WorkerPort: "10201",
   WorkerJoinKey: "alkdfhghdfgdfflkjsdlkjhasdlkjhsdflkvdskjlsdakljasdfkh"}*/
 
-
-var config = Config{
+var defaultConfigPath = "/etc/mozart/"
+var config = Config{}
+/*var config = Config{
   Name: "testcluster1",
   ServerIp: "10.0.0.28",
   ServerPort: "8181",
@@ -166,7 +173,7 @@ var config = Config{
   CaKey: "/etc/mozart/ssl/testcluster1-ca.key",
   ServerCert: "/etc/mozart/ssl/testcluster1-server.crt",
   ServerKey: "/etc/mozart/ssl/testcluster1-server.key"}
-
+*/
 
 var workers = Workers{
   Workers: make(map[string]Worker)}
@@ -185,6 +192,20 @@ func (c *Config) AddContainer(newContainer Container) {
   config.mux.Unlock()
 }
 */
+
+func readConfigFile(file string) {
+  f, err := os.Open(file)
+  if err != nil {
+    panic("cant open file")
+  }
+  defer f.Close()
+
+  enc := json.NewDecoder(f)
+  err = enc.Decode(&config)
+  if err != nil {
+    panic("cant decode")
+  }
+}
 
 //taken from a google help pack
 //https://groups.google.com/forum/#!topic/golang-nuts/rmKTsGHPjlA
@@ -429,14 +450,16 @@ func callSecuredAgent(pubKey, privKey, ca []byte, method string, url string, bod
 }
 
 func main() {
-  //serverPtr := flag.String("server", "", "IP of the server. (Required)")
-  //flag.Parse()
+  configPtr := flag.String("config", "", "Path to config file. (Default: /etc/mozart/config.json)")
+  flag.Parse()
   //Make sure server flag is given.
-  //ADD VERIFICATION HERE TO CHECK IF VALID IP
-  //if(*serverPtr == ""){
-  //  log.Fatal("Must provide a server.")
-  //}
+  if(*configPtr == ""){
+    readConfigFile("/etc/mozart/config.json")
+  } else {
+    readConfigFile(*configPtr)
+  }
 
+  /*
   //Load/Create config data
   if _, err := os.Stat("/home/zbblanton/mozart/mozart-server/config.data"); os.IsNotExist(err) {
     fmt.Println("Config file does not exist. Creating file...")
@@ -445,6 +468,7 @@ func main() {
     fmt.Println("Config file exist. Reading file...")
 		readFile("config", "config.data")
   }
+  */
 
   //Load/Create workers data
   if _, err := os.Stat("workers.data"); os.IsNotExist(err) {

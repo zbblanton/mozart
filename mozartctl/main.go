@@ -17,6 +17,7 @@ import (
 	"gopkg.in/urfave/cli.v1"
 	"bufio"
 	"github.com/olekukonko/tablewriter"
+	"net"
 )
 
 type Config struct {
@@ -40,6 +41,18 @@ type Container struct {
 
 type ContainerListResp struct {
 	Containers map[string]Container
+	Success bool
+	Error string
+}
+
+type Worker struct {
+  AgentIp string
+  AgentPort string
+  Status string
+}
+
+type WorkerListResp struct {
+	Workers map[string]Worker
 	Success bool
 	Error string
 }
@@ -154,6 +167,10 @@ func clusterCreate(c *cli.Context) {
 
 	if(server == ""){
 		log.Fatal("Please provide the Mozart server address.")
+	}
+
+	if(net.ParseIP(server) == nil){
+		log.Fatal("Invalid IP address!")
 	}
 
 	fmt.Println("Creating Mozart CA...")
@@ -340,6 +357,31 @@ func containerList(c *cli.Context) {
 	table.Render() // Send output
 }
 
+func nodesList(c *cli.Context) {
+	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/nodes/list"
+	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "GET", url, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	respBody := WorkerListResp{}
+	err = json.Unmarshal(resp, &respBody)
+	if err != nil {
+		panic(err)
+	}
+
+	if(!respBody.Success){
+		panic(respBody.Error)
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"IP", "Port", "Status"})
+	for _, n := range respBody.Workers {
+	   table.Append([]string{n.AgentIp, n.AgentPort, n.Status})
+	}
+	table.Render() // Send output
+}
+
 var defaultSSLPath = "/etc/mozart/ssl/"
 var defaultConfigPath = "/etc/mozart/"
 var config = Config{}
@@ -371,6 +413,17 @@ func main() {
 					Name:  "ls",
 					Usage: "List all clusters this client can connect to.",
 					Action: clusterList,
+				},
+			},
+		},
+		{
+			Name:        "nodes",
+			Usage:       "Helper commands for nodes.",
+			Subcommands: []cli.Command{
+				{
+					Name:  "ls",
+					Usage: "List all nodes in a cluster.",
+					Action: nodesList,
 				},
 			},
 		},

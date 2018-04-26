@@ -209,6 +209,15 @@ func ContainersListWorkersHandler(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(resp)
 }
 
+func NodeListHandler(w http.ResponseWriter, r *http.Request) {
+  w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+  w.WriteHeader(http.StatusOK)
+  defer r.Body.Close()
+
+  resp := NodeListResp{workers.Workers, true, ""}
+  json.NewEncoder(w).Encode(resp)
+}
+
 func startJoinServer(serverIp string, joinPort string, caCert string, serverCert string, serverKey string){
   router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/", NodeInitialJoinHandler)
@@ -237,7 +246,7 @@ func startApiServer(serverIp string, serverPort string, caCert string, serverCer
   router.HandleFunc("/containers/status/{container}", RootHandler)
   router.HandleFunc("/containers/inspect/{container}", RootHandler)
 
-  router.HandleFunc("/nodes/list", RootHandler)
+  router.HandleFunc("/nodes/list", NodeListHandler)
   router.HandleFunc("/nodes/list/{type}", RootHandler)
   router.HandleFunc("/nodes/join", NodeJoinHandler)
 

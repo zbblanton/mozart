@@ -6,6 +6,7 @@ import(
   "sync"
   "flag"
 	"log"
+  "os"
   "crypto/x509"
 	"crypto/x509/pkix"
   "crypto/rand"
@@ -202,18 +203,35 @@ func main() {
   serverPtr := flag.String("server", "", "Hostname or IP of the mozart server. (Required)")
   keyPtr := flag.String("key", "", "Mozart join key to join the cluster. (Required)")
   caHashPtr := flag.String("ca-hash", "", "Mozart CA hash to verify server CA. (Required)")
+
   flag.Parse()
   if(*agentPtr == ""){
-    log.Fatal("Must provide this nodes Hostname or IP.")
+    if env := os.Getenv("MOZART_AGENT_IP"); env == "" {
+      log.Fatal("Must provide this nodes Hostname or IP.")
+    } else {
+      agentPtr = &env
+    }
   }
   if(*serverPtr == ""){
-    log.Fatal("Must provide a server.")
+    if env := os.Getenv("MOZART_SERVER_IP"); env == "" {
+      log.Fatal("Must provide a server.")
+    } else {
+      agentPtr = &env
+    }
   }
   if(*keyPtr == ""){
-    log.Fatal("Must provide a join key to join the cluster.")
+    if env := os.Getenv("MOZART_JOIN_KEY"); env == "" {
+      log.Fatal("Must provide a join key to join the cluster.")
+    } else {
+      agentPtr = &env
+    }
   }
   if(*caHashPtr == ""){
-    log.Fatal("Must provide a CA hash to verify the cluster CA.")
+    if env := os.Getenv("MOZART_CA_HASH"); env == "" {
+      log.Fatal("Must provide a CA hash to verify the cluster CA.")
+    } else {
+      agentPtr = &env
+    }
   }
   fmt.Println("Joining agent to " + *serverPtr + "...")
   config.ServerKey = joinAgent(*serverPtr, *agentPtr, *keyPtr, *caHashPtr)
