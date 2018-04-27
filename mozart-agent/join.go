@@ -47,7 +47,7 @@ func joinAgent(serverIp string, agentIp string, joinKey string, agentCaHash stri
   json.NewEncoder(b).Encode(j)
   fmt.Println("Sending initial join request...")
 
-  resp, err := callInsecuredServer("POST", "https://" + serverIp + ":47433/", b)
+  resp, err := callInsecuredServer("POST", "https://" + serverIp + ":48433/", b)
   if err != nil {
 		panic(err)
 	}
@@ -130,7 +130,7 @@ func joinAgent(serverIp string, agentIp string, joinKey string, agentCaHash stri
   b2 := new(bytes.Buffer)
   json.NewEncoder(b2).Encode(joinReq)
 
-  url := "https://" + serverIp + ":8181/nodes/join"
+  url := "https://" + serverIp + ":47433/nodes/join"
 
   fmt.Println("Sending secured join request...")
 
