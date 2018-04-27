@@ -230,7 +230,8 @@ func serviceList(c *cli.Context) {
 }
 
 func containerRun(c *cli.Context) {
-	configPath := c.String("config")
+	//configPath := c.String("config")
+	configPath := c.Args().First()
 	if(configPath == ""){
 		configPath = "config.json"
 	}
