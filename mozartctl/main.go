@@ -193,8 +193,8 @@ func clusterCreate(c *cli.Context) {
 	config := Config{
 	  Name: name,
 	  ServerIp: server,
-	  ServerPort: "8181",
-	  AgentPort: "8080",
+	  ServerPort: "47433",
+	  AgentPort: "49433",
 	  AgentJoinKey: joinKey,
 	  CaCert: defaultSSLPath + name + "-ca.crt",
 	  CaKey: defaultSSLPath + name + "-ca.key",
@@ -214,57 +214,7 @@ func clusterCreate(c *cli.Context) {
 }
 
 func clusterList(c *cli.Context) {
-	localCaFile := "ca.crt"
-	localCertFile := "mozart-client.crt"
-	localKeyFile := "mozart-client.key"
-
-	clientCert, err := tls.LoadX509KeyPair(localCertFile, localKeyFile)
-	if err != nil {
-		panic(err)
-	}
-
-	// Get the SystemCertPool, continue with an empty pool on error
-	rootCAs, _ := x509.SystemCertPool()
-	if rootCAs == nil {
-		rootCAs = x509.NewCertPool()
-	}
-
-	// Read in the cert file
-	certs, err := ioutil.ReadFile(localCaFile)
-	if err != nil {
-		log.Fatalf("Failed to append %q to RootCAs: %v", localCertFile, err)
-	}
-
-	// Append our cert to the system pool
-	if ok := rootCAs.AppendCertsFromPEM(certs); !ok {
-		log.Println("No certs appended, using system certs only")
-	}
-
-	// Trust cert pool in our client
-	config := &tls.Config{
-		InsecureSkipVerify: false,
-		RootCAs:            rootCAs,
-		Certificates: 			[]tls.Certificate{clientCert},
-	}
-	tr := &http.Transport{TLSClientConfig: config}
-	client := &http.Client{Transport: tr}
-
-	// Still works with host-trusted CAs!
-	req, err := http.NewRequest(http.MethodGet, "https://10.0.0.28:8181/", nil)
-	if err != nil {
-		panic(err)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		panic(err)
-	}
-	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
-	bodyStr := string(body)
-	fmt.Printf(bodyStr)
+	fmt.Println("Feature not yet implemented.")
 }
 
 func serviceCreate(c *cli.Context) {

@@ -114,7 +114,7 @@ func JoinHandler(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(p)
 }
 
-func startAgentApi(){
+func startAgentApi(port string){
   router := mux.NewRouter().StrictSlash(true)
 
 	router.HandleFunc("/", RootHandler)
@@ -146,8 +146,13 @@ func startAgentApi(){
       ClientAuth: tls.RequireAndVerifyClientCert}
 
   //Setup server config
-  server := &http.Server{
+  /*server := &http.Server{
         Addr: "10.0.0.28" + ":" + "8080",
+        Handler: handler,
+        TLSConfig: tlsCfg}*/
+  //Changed to listen on all interfaces.
+  server := &http.Server{
+        Addr: ":" + port,
         Handler: handler,
         TLSConfig: tlsCfg}
 

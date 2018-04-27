@@ -20,7 +20,7 @@ func controllerContainersStart(c Container){
 
   b := new(bytes.Buffer)
   json.NewEncoder(b).Encode(j)
-  url := "https://" + c.Worker + ":8080" + "/create"
+  url := "https://" + c.Worker + ":49433" + "/create"
 
   _, err := callSecuredAgent(serverTlsCert, serverTlsKey, caTlsCert, "POST", url, b)
   if err != nil {
@@ -35,7 +35,7 @@ func controllerContainersStop(c Container){
     Container ContainerConfig
   }
 
-  url := "https://" + c.Worker + ":8080" + "/stop/" + c.Name
+  url := "https://" + c.Worker + ":49433" + "/stop/" + c.Name
 
   _, err := callSecuredAgent(serverTlsCert, serverTlsKey, caTlsCert, "GET", url, nil)
   if err != nil {

@@ -239,6 +239,7 @@ func main() {
     log.Fatal("Something went wrong when trying to join the agent.")
   }
   fmt.Println("Agent successfully joined the cluster.")
-  //go MonitorContainers()
-	startAgentApi()
+
+  go MonitorContainers(*serverPtr, *agentPtr)
+	startAgentApi("49433")
 }
