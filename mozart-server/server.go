@@ -101,6 +101,7 @@ type ContainerConfig struct {
 
 type NodeInitialJoinReq struct {
   AgentIp string
+  AgentPort string
   JoinKey string
   Csr string
 }
@@ -513,7 +514,7 @@ func main() {
 
   //Start join server
   fmt.Println("Starting join server...")
-  go startJoinServer(config.ServerIp, "8282", config.CaCert, config.ServerCert, config.ServerKey)
+  go startJoinServer(config.ServerIp, "48433", config.CaCert, config.ServerCert, config.ServerKey)
 
   //Bad
   //Bad

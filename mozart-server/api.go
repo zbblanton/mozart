@@ -99,7 +99,7 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
   }
   serverKey := base64.URLEncoding.EncodeToString(randKey)
   //Save key to config
-  newWorker := Worker{AgentIp: j.AgentIp, AgentPort: j.AgentPort, ServerKey: serverKey, AgentKey: j.AgentKey, Status: "active"}
+  newWorker := Worker{AgentIp: j.AgentIp, AgentPort: "49433", ServerKey: serverKey, AgentKey: j.AgentKey, Status: "active"}
   workers.mux.Lock()
   workers.Workers[j.AgentIp] = newWorker
   writeFile("workers", "workers.data")

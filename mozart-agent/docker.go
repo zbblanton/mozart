@@ -7,6 +7,7 @@ import(
   "bytes"
 	"encoding/json"
 	"net/http"
+  "fmt"
 )
 
 func ConvertContainerConfigToDockerContainerConfig(c ContainerConfig) DockerContainerConfig {
@@ -74,6 +75,8 @@ func DockerCreateContainer(ContainerName string, Container DockerContainerConfig
   j := ContainerCreateResp{}
   b := bytes.NewReader(body)
   json.NewDecoder(b).Decode(&j)
+
+  fmt.Println("Response from Docker Runtime API:", j)
 
   //ADD VERIFICATION HERE!!!!!!!!!!!!!
 
