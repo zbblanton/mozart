@@ -20,8 +20,17 @@ func MonitorContainers(serverIp, agentIp string) {
     if err != nil {
         panic(err)
     }*/
+
+    type Container struct {
+      Name string
+      State string
+      DesiredState string
+      Config ContainerConfig
+      Worker string
+    }
+
     type ContainersListResp struct {
-      Containers []string
+      Containers []Container
       Success bool
       Error string
     }
@@ -36,29 +45,29 @@ func MonitorContainers(serverIp, agentIp string) {
     //fmt.Print(j)
     //Loop through the containers and check the status, if not running send new state to master
     for _, container := range j.Containers {
-      fmt.Println(container)
-      status, err := DockerContainerStatus(container)
+      //fmt.Println(container)
+      status, err := DockerContainerStatus(container.Name)
       if err != nil{
         panic("Failed to get container status.")
       }
-      if (status != "running") {
-        fmt.Println(container + ": Not running, notifying master.")
+      if (status != "running" && container.State != "" && container.DesiredState != "stopped") {
+        fmt.Println(container.Name + ": Not running, notifying master.")
         type StateUpdateReq struct {
           Key string
           ContainerName string
           State string
         }
-        j := StateUpdateReq{Key: "ADDCHECKINGFORTHIS", ContainerName: container, State: status}
+        j := StateUpdateReq{Key: "ADDCHECKINGFORTHIS", ContainerName: container.Name, State: status}
         b := new(bytes.Buffer)
         json.NewEncoder(b).Encode(j)
-        url := "https://" + serverIp + ":47433/containers/" + container + "/state/update"
+        url := "https://" + serverIp + ":47433/containers/" + container.Name + "/state/update"
         _, err := callSecuredServer(agentTlsCert, agentTlsKey, caTLSCert, "POST", url, b)
         //_, err := http.Post(url, "application/json; charset=utf-8", b)
         if err != nil {
             panic(err)
         }
       }
-      fmt.Println(status)
+      //fmt.Println(status)
     }
 
     fmt.Println("Waiting 5 seconds!")

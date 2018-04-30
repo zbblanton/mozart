@@ -193,15 +193,15 @@ func ContainersListWorkersHandler(w http.ResponseWriter, r *http.Request) {
   defer r.Body.Close()
 
   type ContainersListWorkers struct {
-    Containers []string
+    Containers []Container
     Success bool
     Error string
   }
 
-  c := ContainersListWorkers{[]string{}, true, ""}
+  c := ContainersListWorkers{[]Container{}, true, ""}
   for _, container := range containers.Containers {
     if (container.Worker == vars["worker"]){
-      c.Containers = append(c.Containers, container.Name)
+      c.Containers = append(c.Containers, container)
     }
   }
 
