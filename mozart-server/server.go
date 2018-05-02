@@ -268,15 +268,58 @@ func readFile(dataClass string, file string) {
   }
 }
 
-func selectWorker() Worker {
-  //Simply spit out a worker for the time being
-  //There is a race condition here, need to add mux
-  for _, worker := range workers.Workers {
-    return worker
+func selectWorker() (w Worker, err error) {
+  if(len(workers.Workers) == 0){
+    return Worker{}, errors.New("No workers!")
   }
 
-  return Worker{}
-  //return Worker{NodeIp: "10.0.0.28:8080", ServerKey: "23123123132432423423dadsad"}
+  if(len(containers.Containers) == 0){
+    for _, worker := range workers.Workers {
+      return worker, nil
+    }
+  }
+
+  workerPool := make(map[string]uint)
+
+  //Scan containers and get what workers they are using.
+  for _, container := range containers.Containers {
+    //Check if worker is already in map, if so increment it's counter
+    if _, ok := workerPool[container.Worker]; ok {
+      curr := workerPool[container.Worker]
+      curr = curr + 1
+      workerPool[container.Worker] = curr
+    } else {
+      workerPool[container.Worker] = 1
+    }
+  }
+
+  //Find the lowest used worker
+  firstRun := true
+  lowestWorker := ""
+  var lowestContainers uint = 0
+  for _, worker := range workers.Workers {
+    if _, ok := workerPool[worker.AgentIp]; ok {
+
+      if(firstRun){
+        firstRun = false
+        lowestContainers = workerPool[worker.AgentIp]
+        lowestWorker = worker.AgentIp
+      }
+
+      if(workerPool[worker.AgentIp] < lowestContainers) {
+        lowestWorker = worker.AgentIp
+        lowestContainers = workerPool[worker.AgentIp]
+      }
+
+    } else {
+      lowestWorker = worker.AgentIp
+      //lowestContainers = numContainers
+      break
+    }
+  }
+  fmt.Println("Worker", lowestWorker,"selected.")
+
+  return workers.Workers[lowestWorker], nil
 }
 
 func checkWorkerHealth(workerIp string, workerPort string) bool {

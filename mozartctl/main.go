@@ -213,6 +213,16 @@ func clusterCreate(c *cli.Context) {
 	fmt.Printf("\n\n\n")
 }
 
+func clusterPrint(c *cli.Context) {
+	//Generate hash
+	caHash := generateSha256(config.CaCert)
+
+	fmt.Printf("\n\n\n")
+	fmt.Println("Once the server has been set up, add workers by running this command:")
+	fmt.Printf("mozart-agent --server=%s --agent=INSERT_AGENT_IP --key=%s --ca-hash=%s", config.ServerIp, config.AgentJoinKey, caHash)
+	fmt.Printf("\n\n\n")
+}
+
 func clusterList(c *cli.Context) {
 	fmt.Println("Feature not yet implemented.")
 }
@@ -359,6 +369,11 @@ func main() {
 					Usage: "Generate a new cluster config and files.",
 					Flags: []cli.Flag{flagClusterName, flagClusterServer},
 					Action: clusterCreate,
+				},
+				{
+					Name:  "print",
+					Usage: "Print the install instructions.",
+					Action: clusterPrint,
 				},
 				{
 					Name:  "ls",

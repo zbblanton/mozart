@@ -118,7 +118,12 @@ func ContainersCreateHandler(w http.ResponseWriter, r *http.Request) {
   json.NewDecoder(r.Body).Decode(&j)
   if(ContainersCreateVerification(j)){
       fmt.Println("Received a run request for config: ", j)
-      schedulerCreateContainer(j)
+      err := schedulerCreateContainer(j)
+      if err != nil {
+        resp := Resp{false, "No workers!"} //Add better error.
+        json.NewEncoder(w).Encode(resp)
+        return
+      }
       resp := Resp{true, ""}
       json.NewEncoder(w).Encode(resp)
   }else {
