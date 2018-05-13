@@ -179,6 +179,8 @@ var config = Config{}
 var workers = Workers{
   Workers: make(map[string]Worker)}
 
+var containerQueue = make(chan interface{}, 3)
+var containerRetryQueue = make(chan interface{}, 3)
 var containers = Containers{
   Containers: make(map[string]Container)}
 
@@ -549,7 +551,9 @@ func main() {
 
   //Start subprocesses
   go monitorWorkers()
-  go controllerContainers()
+  //go controllerContainers()
+  go containerControllerQueue(containerQueue)
+  go containerControllerRetryQueue(containerRetryQueue)
 
   //Start API server
   fmt.Println("Starting API server...")

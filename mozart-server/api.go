@@ -117,13 +117,15 @@ func ContainersCreateHandler(w http.ResponseWriter, r *http.Request) {
   j := ContainerConfig{}
   json.NewDecoder(r.Body).Decode(&j)
   if(ContainersCreateVerification(j)){
-      fmt.Println("Received a run request for config: ", j)
+    fmt.Println("Received a run request for config: ", j, "adding to queue.")
+    containerQueue <- j
+      /*
       err := schedulerCreateContainer(j)
       if err != nil {
         resp := Resp{false, "No workers!"} //Add better error.
         json.NewEncoder(w).Encode(resp)
         return
-      }
+      }*/
       resp := Resp{true, ""}
       json.NewEncoder(w).Encode(resp)
   }else {
@@ -145,12 +147,24 @@ func ContainersStopHandler(w http.ResponseWriter, r *http.Request) {
     return
   }
 
-  err :=schedulerStopContainer(containerName)
-  if err != nil {
+  //Check if container exist
+  containers.mux.Lock()
+  if _, ok := containers.Containers[containerName]; !ok {
     resp := Resp{false, "Cannot find container"}
     json.NewEncoder(w).Encode(resp)
     return
   }
+  containers.mux.Unlock()
+
+  //Add to queue
+  containerQueue <- containerName
+  /*
+  err := schedulerStopContainer(containerName)
+  if err != nil {
+    resp := Resp{false, "Cannot find container"}
+    json.NewEncoder(w).Encode(resp)
+    return
+  }*/
   resp := Resp{true, ""}
   json.NewEncoder(w).Encode(resp)
 }
