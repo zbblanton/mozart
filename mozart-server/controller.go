@@ -70,9 +70,9 @@ func containerControllerStart(c ContainerConfig) bool {
   //Will need to add support for the worker key!!!!!
   type CreateReq struct {
     Key string
-    Container ContainerConfig
+    Container Container
   }
-  j := CreateReq{Key: "NEEDTOADDSUPPORTFORTHIS!!!", Container: newContainer.Config}
+  j := CreateReq{Key: "NEEDTOADDSUPPORTFORTHIS!!!", Container: newContainer}
   b := new(bytes.Buffer)
   json.NewEncoder(b).Encode(j)
   url := "https://" + newContainer.Worker + ":49433" + "/create"

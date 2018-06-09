@@ -51,8 +51,16 @@ func CreateHandler(w http.ResponseWriter, r *http.Request) {
 	j := CreateReq{}
 	json.NewDecoder(r.Body).Decode(&j)
 
+  fmt.Println("TEMP Received run request from master.")
+
+  //Add to queue
+  q := ControllerMsg{Action: "create", Data: j}
+  //containerQueue <- j.Container
+  containerQueue <- q
+
+  /*
   if(getContainerRuntime() == "docker") {
-    container := ConvertContainerConfigToDockerContainerConfig(j.Container)
+    container := ConvertContainerConfigToDockerContainerConfig(j.Container.Config)
     fmt.Print(container)
     fmt.Println(" ")
     id, _ := DockerCreateContainer(j.Container.Name, container)
@@ -60,6 +68,7 @@ func CreateHandler(w http.ResponseWriter, r *http.Request) {
     fmt.Println(" ")
     DockerStartContainer(id)
   }
+  */
 
   p := Resp{true, ""}
   json.NewEncoder(w).Encode(p)
@@ -75,7 +84,13 @@ func StopHandler(w http.ResponseWriter, r *http.Request) {
 
   if(containerName != ""){
     fmt.Println("Stopping container: ", containerName)
-    DockerStopContainer(containerName)
+    //DockerStopContainer(containerName)
+
+    //Add to queue
+    q := ControllerMsg{Action: "stop", Data: containerName}
+    //containerQueue <- containerName
+    containerQueue <- q
+
     p := Resp{true, ""}
     json.NewEncoder(w).Encode(p)
   } else {

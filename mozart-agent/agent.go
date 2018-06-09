@@ -18,6 +18,19 @@ import(
   "io"
 )
 
+type Container struct {
+  Name string
+  State string
+  DesiredState string
+  Config ContainerConfig
+  Worker string
+}
+
+type Containers struct {
+  Containers map[string]Container
+  mux sync.Mutex
+}
+
 type ExposedPort struct {
 	ContainerPort string
 	HostPort string
@@ -67,10 +80,15 @@ type DockerContainerConfig struct {
   ExposedPorts map[string]struct{}
   HostConfig DockerContainerHostConfig
 }
-
+/*
 type CreateReq struct {
   Key string
   Container ContainerConfig
+}
+*/
+type CreateReq struct {
+  Key string
+  Container Container
 }
 
 type StopReq struct {
@@ -96,6 +114,12 @@ type Resp struct {
 type Config struct {
   ServerKey string
   mux sync.Mutex
+}
+
+type ControllerMsg struct {
+  Action string
+  Data interface{}
+  Retries uint
 }
 
 func (c *Config) getServerKey() string {
@@ -198,11 +222,22 @@ var agentTlsKey = []byte{}
 var agentTlsCert = []byte{}
 var caTLSCert = []byte{}
 
+var containerQueue = make(chan ControllerMsg, 3)
+var containerRetryQueue = make(chan ControllerMsg, 3)
+var containers = Containers{
+  Containers: make(map[string]Container)}
+
+var agentPtr = flag.String("agent", "", "Hostname or IP to use for this agent. (Required)")
+var serverPtr = flag.String("server", "", "Hostname or IP of the mozart server. (Required)")
+var keyPtr = flag.String("key", "", "Mozart join key to join the cluster. (Required)")
+var caHashPtr = flag.String("ca-hash", "", "Mozart CA hash to verify server CA. (Required)")
+
+
 func main() {
-  agentPtr := flag.String("agent", "", "Hostname or IP to use for this agent. (Required)")
-  serverPtr := flag.String("server", "", "Hostname or IP of the mozart server. (Required)")
-  keyPtr := flag.String("key", "", "Mozart join key to join the cluster. (Required)")
-  caHashPtr := flag.String("ca-hash", "", "Mozart CA hash to verify server CA. (Required)")
+  // agentPtr := flag.String("agent", "", "Hostname or IP to use for this agent. (Required)")
+  // serverPtr := flag.String("server", "", "Hostname or IP of the mozart server. (Required)")
+  // keyPtr := flag.String("key", "", "Mozart join key to join the cluster. (Required)")
+  // caHashPtr := flag.String("ca-hash", "", "Mozart CA hash to verify server CA. (Required)")
 
   flag.Parse()
   if(*agentPtr == ""){
@@ -240,6 +275,8 @@ func main() {
   }
   fmt.Println("Agent successfully joined the cluster.")
 
+  go containerControllerQueue(containerQueue)
+  go containerControllerRetryQueue(containerRetryQueue)
   go MonitorContainers(*serverPtr, *agentPtr)
 	startAgentApi("49433")
 }
