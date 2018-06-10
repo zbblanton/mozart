@@ -348,7 +348,7 @@ var defaultConfigPath = "/etc/mozart/"
 var config = Config{}
 
 func main() {
-	readConfigFile("/etc/mozart/testcluster1-config.json")
+	readConfigFile("/etc/mozart/config.json")
 
 	app := cli.NewApp()
 	app.Name = "mozartctl"
