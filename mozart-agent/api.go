@@ -54,7 +54,7 @@ func CreateHandler(w http.ResponseWriter, r *http.Request) {
   fmt.Println("TEMP Received run request from master.")
 
   //Add to queue
-  q := ControllerMsg{Action: "create", Data: j}
+  q := ControllerMsg{Action: "create", Data: j.Container}
   //containerQueue <- j.Container
   containerQueue <- q
 
