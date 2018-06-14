@@ -79,7 +79,8 @@ func writeFile(file string, config Config){
   }
 }
 
-func readConfigFile(file string) {
+func readConfigFile(file string) Config{
+  config := Config{}
   f, err := os.Open(file)
   if err != nil {
     panic("cant open file")
@@ -91,6 +92,8 @@ func readConfigFile(file string) {
   if err != nil {
     panic("cant decode")
   }
+
+  return config
 }
 
 func callSecuredServer(pubKey, privKey, ca string, method string, url string, body io.Reader) (respBody []byte, err error)  {
@@ -214,6 +217,8 @@ func clusterCreate(c *cli.Context) {
 }
 
 func clusterPrint(c *cli.Context) {
+    config := readConfigFile("/etc/mozart/config.json")
+
 	//Generate hash
 	caHash := generateSha256(config.CaCert)
 
@@ -240,6 +245,8 @@ func serviceList(c *cli.Context) {
 }
 
 func containerRun(c *cli.Context) {
+    config := readConfigFile("/etc/mozart/config.json")
+
 	//configPath := c.String("config")
 	configPath := c.Args().First()
 	if(configPath == ""){
@@ -272,6 +279,8 @@ func containerRun(c *cli.Context) {
 }
 
 func containerStop(c *cli.Context) {
+    config := readConfigFile("/etc/mozart/config.json")
+
 	if(c.Args().First() == ""){
 		panic("Must provide the name or id of the container.")
 	}
@@ -289,11 +298,13 @@ func containerStop(c *cli.Context) {
 	}
 
 	if(!respBody.Success){
-		panic(respBody.Error)
+		fmt.Println(respBody.Error)
 	}
 }
 
 func containerList(c *cli.Context) {
+    config := readConfigFile("/etc/mozart/config.json")
+
 	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/containers/list"
 	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "GET", url, nil)
 	if err != nil {
@@ -319,6 +330,8 @@ func containerList(c *cli.Context) {
 }
 
 func nodesList(c *cli.Context) {
+    config := readConfigFile("/etc/mozart/config.json")
+
 	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/nodes/list"
 	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "GET", url, nil)
 	if err != nil {
@@ -348,8 +361,6 @@ var defaultConfigPath = "/etc/mozart/"
 var config = Config{}
 
 func main() {
-	readConfigFile("/etc/mozart/config.json")
-
 	app := cli.NewApp()
 	app.Name = "mozartctl"
 	app.Usage = "CLI for Mozart clusters."

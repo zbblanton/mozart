@@ -152,12 +152,14 @@ func ContainersStopHandler(w http.ResponseWriter, r *http.Request) {
   if _, ok := containers.Containers[containerName]; !ok {
     resp := Resp{false, "Cannot find container"}
     json.NewEncoder(w).Encode(resp)
-    return
+  } else {
+    resp := Resp{true, ""}
+    json.NewEncoder(w).Encode(resp)
+    //Add to queue
+    containerQueue <- containerName
   }
   containers.mux.Unlock()
 
-  //Add to queue
-  containerQueue <- containerName
   /*
   err := schedulerStopContainer(containerName)
   if err != nil {
@@ -165,8 +167,7 @@ func ContainersStopHandler(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(resp)
     return
   }*/
-  resp := Resp{true, ""}
-  json.NewEncoder(w).Encode(resp)
+
 }
 
 func ContainersStateUpdateHandler(w http.ResponseWriter, r *http.Request) {
@@ -186,10 +187,14 @@ func ContainersStateUpdateHandler(w http.ResponseWriter, r *http.Request) {
   //TODO: Verify Worker Key here, the container must live on this host.
   containers.mux.Lock()
   fmt.Print(j)
-  c := containers.Containers[j.ContainerName]
-  c.State = j.State
-  fmt.Print(c)
-  containers.Containers[j.Key] = c
+  if j.State == "stopped" && containers.Containers[j.ContainerName].DesiredState == "stopped" {
+    delete(containers.Containers, j.ContainerName)
+  } else {
+    c := containers.Containers[j.ContainerName]
+    c.State = j.State
+    fmt.Print(c)
+    containers.Containers[j.ContainerName] = c
+  }
   containers.mux.Unlock()
 
   resp := Resp{true, ""}

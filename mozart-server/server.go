@@ -143,6 +143,13 @@ type ContainerInspectResp struct {
   Success bool `json:"success"`
   Error string `json:"error"`
 }
+
+type ControllerMsg struct {
+  Action string
+  Data interface{}
+  Retries uint
+}
+
 /*
 type NodeListResp struct {
   Success bool `json:"success"`
@@ -176,6 +183,8 @@ var config = Config{}
   ServerKey: "/etc/mozart/ssl/testcluster1-server.key"}
 */
 
+var workerQueue = make(chan interface{}, 3)
+var workerRetryQueue = make(chan interface{}, 3)
 var workers = Workers{
   Workers: make(map[string]Worker)}
 

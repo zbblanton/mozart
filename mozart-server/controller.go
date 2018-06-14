@@ -55,17 +55,32 @@ func containerControllerExecutor(msg interface{}) bool{
 }
 
 func containerControllerStart(c ContainerConfig) bool {
-  worker, err := selectWorker()
-  if err != nil {
-    fmt.Println("Error:", err)
-    return false
-  }
   newContainer := Container{
     Name: c.Name,
-    State: "",
+    State: "starting",
     DesiredState: "running",
-    Config: c,
-    Worker: worker.AgentIp}
+    Config: c}
+
+    //Save container
+    containers.mux.Lock()
+    //config.Containers = append(config.Containers, newContainer)
+    containers.Containers[c.Name] = newContainer
+    writeFile("containers", "containers.data")
+    containers.mux.Unlock()
+
+    worker, err := selectWorker()
+    if err != nil {
+      fmt.Println("Error:", err)
+      return false
+    }
+    newContainer.Worker = worker.AgentIp
+
+    //Save container
+    containers.mux.Lock()
+    //config.Containers = append(config.Containers, newContainer)
+    containers.Containers[c.Name] = newContainer
+    writeFile("containers", "containers.data")
+    containers.mux.Unlock()
 
   //Will need to add support for the worker key!!!!!
   type CreateReq struct {
@@ -81,13 +96,6 @@ func containerControllerStart(c ContainerConfig) bool {
 		//panic(err)
     return false
 	}
-
-  //Save container
-  containers.mux.Lock()
-  //config.Containers = append(config.Containers, newContainer)
-  containers.Containers[c.Name] = newContainer
-  writeFile("containers", "containers.data")
-  containers.mux.Unlock()
 
   return true
 }
@@ -113,6 +121,61 @@ func containerControllerStop(name string) bool {
 }
 
 //////////////////////////////////////////////////////////
+
+
+
+
+
+func workerControllerQueue(messages chan ControllerMsg) {
+  //Set a ticker for a small delay (may not be needed for this queue)
+  //Range through the messages, running executor on each
+  //if it fails, add the retry queue
+  ticker := time.NewTicker(time.Second)
+  for message := range messages {
+      //message := message.(test)
+      //fmt.Println("Message", message.test2, time.Now())
+      if(!workerControllerExecutor(message)){
+        workerRetryQueue <- message
+      }
+      <- ticker.C
+  }
+}
+
+func workerControllerRetryQueue(messages chan ControllerMsg) {
+  //Set a ticker for a retry delay (careful, make sure the delay is what you want)
+  //Range through the messages, running executor on each
+  //if it fails, add to the retry queue again
+  ticker := time.NewTicker(5 * time.Second)
+  for message := range messages {
+      if(!workerControllerExecutor(message)){
+        workerRetryQueue <- message
+      }
+      <- ticker.C
+  }
+}
+
+func workerControllerExecutor(msg ControllerMsg) bool{
+  //Case for each command, run the function matching the command and struct type
+  switch msg.Action {
+    case "reconnect":
+      worker := msg.Data.(Worker)
+      if(checkWorkerHealth(worker.AgentIp, worker.AgentPort)){
+        return true
+      } else {
+        return false
+      }
+    default:
+      return false
+  }
+
+  return true
+}
+
+
+
+
+
+
 
 
 

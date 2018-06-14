@@ -18,7 +18,7 @@ func monitorWorkers() {
         fmt.Println("Worker " + index + " is UP.")
       } else {
         fmt.Println("Worker " + index + " is DOWN.")
-        worker.Status = "not-connected"
+        worker.Status = "reconnecting"
         workers.Workers[index] = worker
       }
       //fmt.Print(worker)
