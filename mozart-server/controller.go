@@ -48,6 +48,7 @@ func containerControllerExecutor(msg interface{}) bool{
       msg := msg.(string)
       return containerControllerStop(msg)
     default:
+      panic("Not action available for Container Controller.")
       return false
   }
 
@@ -165,6 +166,7 @@ func workerControllerExecutor(msg ControllerMsg) bool{
         return false
       }
     default:
+      panic("Not action available for Worker Controller.")
       return false
   }
 

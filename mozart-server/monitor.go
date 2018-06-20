@@ -24,8 +24,8 @@ func monitorWorkers() {
       //fmt.Print(worker)
     }
     workers.mux.Unlock()
-    fmt.Println("Waiting 30 seconds!")
-    time.Sleep(time.Duration(30) * time.Second)
+    fmt.Println("Waiting 10 seconds!")
+    time.Sleep(time.Duration(10) * time.Second)
   }
   os.Exit(1) //In case the for loop exits, stop the whole program.
 }

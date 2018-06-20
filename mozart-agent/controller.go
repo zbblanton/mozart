@@ -38,6 +38,11 @@ func containerControllerRetryQueue(messages chan ControllerMsg) {
 }
 
 func containerControllerUpdateStateWithoutMux(containerName, state, serverIp string) {
+  //Check if container exist
+  //if _, ok := containers.Containers[containerName]; !ok {
+  //  return
+  //}
+
   //Save new state
   container := containers.Containers[containerName]
   container.State = state
@@ -63,6 +68,11 @@ func containerControllerUpdateStateWithoutMux(containerName, state, serverIp str
 
 
 func containerControllerUpdateStateWithMux(containerName, state, serverIp string) {
+  //Check if container exist
+  //if _, ok := containers.Containers[containerName]; !ok {
+  //  return
+  //}
+
   //Save new state
   containers.mux.Lock()
   container := containers.Containers[containerName]
@@ -91,6 +101,7 @@ func containerControllerUpdateStateWithMux(containerName, state, serverIp string
 func containerControllerExecutor(msg ControllerMsg) bool{
   //Case for each command, run the function matching the command and struct type
   //switch msg.(type) {
+  fmt.Println("Controller executing action:", msg.Action)
   switch msg.Action {
     case "create":
       msg := msg.Data.(Container)
@@ -120,6 +131,7 @@ func containerControllerExecutor(msg ControllerMsg) bool{
       //send reschedule to master and delete this container from the map.
     case "stop":
       msg := msg.Data.(string)
+      fmt.Println("TEMP Stop name is:", msg)
       containers.mux.Lock()
       container := containers.Containers[msg]
       container.State = "stopping"
@@ -135,9 +147,11 @@ func containerControllerExecutor(msg ControllerMsg) bool{
       containers.mux.Lock()
       //Remove the container from the map
       delete(containers.Containers, msg)
+      fmt.Println(containers.Containers)
       containers.mux.Unlock()
       return true
     default:
+      panic("Not action available for Container Controller.")
       return false
   }
 

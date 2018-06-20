@@ -104,8 +104,17 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
   workers.Workers[j.AgentIp] = newWorker
   writeFile("workers", "workers.data")
   workers.mux.Unlock()
-  //Send key to worker
-  resp := NodeJoinResp{ServerKey: serverKey, Success: true, Error: ""}
+
+  //Send containers and key to worker
+  workerContainers := make(map[string]Container)
+  containers.mux.Lock()
+  for _, container := range containers.Containers {
+    if container.Worker == j.AgentIp {
+      workerContainers[container.Name] = container
+    }
+  }
+  containers.mux.Unlock()
+  resp := NodeJoinResp{ServerKey: serverKey, Containers: workerContainers, Success: true, Error: ""}
   json.NewEncoder(w).Encode(resp)
 }
 

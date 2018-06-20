@@ -141,6 +141,7 @@ func joinAgent(serverIp string, agentIp string, joinKey string, agentCaHash stri
 
   type NodeJoinResp struct {
     ServerKey string
+    Containers map[string]Container
     Success bool `json:"success"`
     Error string `json:"error"`
   }
@@ -152,6 +153,15 @@ func joinAgent(serverIp string, agentIp string, joinKey string, agentCaHash stri
 	}
   fmt.Println("The secured join request response: ", joinResp)
 
+  //Save existing containers if they exist
+  containers.mux.Lock()
+  containers.Containers = joinResp.Containers
+  fmt.Println("Containers that should be running on this worker:")
+  fmt.Println(containers.Containers)
+  //for _, container := range containers.Containers {
+  //  fmt.Println(container)
+  //}
+  containers.mux.Unlock()
 
   return joinResp.ServerKey
 }

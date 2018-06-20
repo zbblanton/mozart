@@ -123,6 +123,7 @@ type NodeJoinReq struct {
 
 type NodeJoinResp struct {
   ServerKey string
+  Containers map[string]Container
   Success bool `json:"success"`
   Error string `json:"error"`
 }

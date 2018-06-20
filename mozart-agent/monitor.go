@@ -12,7 +12,7 @@ func MonitorContainers(serverIp, agentIp string) {
     //Loop through the containers and check the status, if not running send new state to master
     containers.mux.Lock()
     for _, container := range containers.Containers {
-      //fmt.Println(container)
+      fmt.Println("Checking:", container)
       state, err := DockerContainerStatus(container.Name)
       if err != nil{
         panic("Failed to get container status.")
@@ -26,6 +26,7 @@ func MonitorContainers(serverIp, agentIp string) {
               containerControllerUpdateStateWithoutMux(container.Name, "restarting", serverIp)
               q := ControllerMsg{Action: "recreate", Data: container}
               containerQueue <- q
+            default:
           }
         }
       }
