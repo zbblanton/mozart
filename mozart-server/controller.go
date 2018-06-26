@@ -44,6 +44,9 @@ func containerControllerExecutor(msg interface{}) bool{
     case ContainerConfig:
       msg := msg.(ContainerConfig)
       return containerControllerStart(msg)
+    case Container:
+      msg := msg.(Container)
+      return containerControllerMove(msg)
     case string:
       msg := msg.(string)
       return containerControllerStop(msg)
@@ -92,6 +95,48 @@ func containerControllerStart(c ContainerConfig) bool {
   b := new(bytes.Buffer)
   json.NewEncoder(b).Encode(j)
   url := "https://" + newContainer.Worker + ":49433" + "/create"
+  _, err = callSecuredAgent(serverTlsCert, serverTlsKey, caTlsCert, "POST", url, b)
+  if err != nil {
+		//panic(err)
+    return false
+	}
+
+  return true
+}
+
+func containerControllerMove(c Container) bool {
+  c.State = "moving"
+
+  //Save container
+  containers.mux.Lock()
+  //config.Containers = append(config.Containers, newContainer)
+  containers.Containers[c.Name] = c
+  writeFile("containers", "containers.data")
+  containers.mux.Unlock()
+
+  worker, err := selectWorker()
+  if err != nil {
+    fmt.Println("Error:", err)
+    return false
+  }
+  c.Worker = worker.AgentIp
+
+  //Save container
+  containers.mux.Lock()
+  //config.Containers = append(config.Containers, newContainer)
+  containers.Containers[c.Name] = c
+  writeFile("containers", "containers.data")
+  containers.mux.Unlock()
+
+  //Will need to add support for the worker key!!!!!
+  type CreateReq struct {
+    Key string
+    Container Container
+  }
+  j := CreateReq{Key: "NEEDTOADDSUPPORTFORTHIS!!!", Container: c}
+  b := new(bytes.Buffer)
+  json.NewEncoder(b).Encode(j)
+  url := "https://" + c.Worker + ":49433" + "/create"
   _, err = callSecuredAgent(serverTlsCert, serverTlsKey, caTlsCert, "POST", url, b)
   if err != nil {
 		//panic(err)
@@ -159,8 +204,25 @@ func workerControllerExecutor(msg ControllerMsg) bool{
   //Case for each command, run the function matching the command and struct type
   switch msg.Action {
     case "reconnect":
-      worker := msg.Data.(Worker)
+      worker := msg.Data.(ControllerReconnectMsg).worker
+      currentTime := time.Now()
+      //disconnectTime := msg.Data.timesomething.Add(time.Minute)
+      disconnectTime := msg.Data.(ControllerReconnectMsg).disconnectTime
+      if(currentTime.Sub(disconnectTime).Minutes() >= 1){
+        worker.Status = "disconnected"
+        workers.Workers[worker.AgentIp] = worker
+
+        //Move all containers on this worker
+        for _, container := range containers.Containers {
+          if container.Worker == worker.AgentIp {
+            containerQueue <- container
+          }
+        }
+        return true
+      }
       if(checkWorkerHealth(worker.AgentIp, worker.AgentPort)){
+        worker.Status = "connected"
+        workers.Workers[worker.AgentIp] = worker
         return true
       } else {
         return false

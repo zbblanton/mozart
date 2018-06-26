@@ -153,6 +153,31 @@ func joinAgent(serverIp string, agentIp string, joinKey string, agentCaHash stri
 	}
   fmt.Println("The secured join request response: ", joinResp)
 
+  if len(joinResp.Containers) == 0 {
+    stopAllMozartContainers()
+  } else {
+    //Get IDs for mozart Containers
+    var keepRunningList []string
+    for _, container := range joinResp.Containers {
+      id, _ := DockerGetId(container.Name)
+      keepRunningList = append(keepRunningList, id)
+    }
+
+    currentRunningList, _ := DockerList()
+    for _, containerId := range currentRunningList {
+      found := false
+      for _, keepRunningItem := range keepRunningList {
+        if containerId == keepRunningItem {
+          found = true
+          break
+        }
+      }
+      if !found {
+        DockerStopContainer(containerId)
+      }
+    }
+  }
+
   //Save existing containers if they exist
   containers.mux.Lock()
   containers.Containers = joinResp.Containers

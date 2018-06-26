@@ -14,12 +14,18 @@ func monitorWorkers() {
     workers.mux.Lock()
     for index, worker := range workers.Workers {
       fmt.Println("Checking Worker " + index + ".")
-      if(checkWorkerHealth(worker.AgentIp, worker.AgentPort)){
-        fmt.Println("Worker " + index + " is UP.")
-      } else {
+      //if(checkWorkerHealth(worker.AgentIp, worker.AgentPort)){
+      //  fmt.Println("Worker " + index + " is UP.")
+      //} else {
+      if(!checkWorkerHealth(worker.AgentIp, worker.AgentPort) && worker.Status != "reconnecting"){
         fmt.Println("Worker " + index + " is DOWN.")
+        //Need to add an update state function here for mux control like we have for container state
         worker.Status = "reconnecting"
         workers.Workers[index] = worker
+        ///////////////////////////////////////////
+        data := ControllerReconnectMsg{worker: worker, disconnectTime: time.Now()}
+        q := ControllerMsg{Action: "reconnect", Data: data}
+        workerQueue <- q
       }
       //fmt.Print(worker)
     }

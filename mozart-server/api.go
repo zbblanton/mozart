@@ -82,7 +82,7 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
 
   //Check if worker exist and if it has an active or maintenance status
   if worker, ok := workers.Workers[j.AgentIp]; ok {
-    if(worker.Status == "active" || worker.Status == "maintenance"){
+    if(worker.Status == "connected" || worker.Status == "maintenance"){
       resp := NodeJoinResp{ServerKey: "", Success: false, Error: "Host already exist and has an active or maintenance status."}
       json.NewEncoder(w).Encode(resp)
       return

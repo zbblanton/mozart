@@ -217,6 +217,17 @@ func generateCSR(privateKey *rsa.PrivateKey, Ip string) (csr []byte, err error) 
   return csr, err
 }
 
+func stopAllMozartContainers() {
+  list, err := DockerList()
+  if err != nil {
+    panic("Could not get list of mozart containers on host")
+  }
+
+  for _, containerId := range list {
+    DockerStopContainer(containerId)
+  }
+}
+
 var config = Config{ServerKey: ""}
 var agentTlsKey = []byte{}
 var agentTlsCert = []byte{}

@@ -83,6 +83,41 @@ func DockerCreateContainer(ContainerName string, Container DockerContainerConfig
   return j.Id, nil
 }
 
+func DockerList() (containerList []string, err error) {
+  url := "http://d/containers/" + "/json"
+  body, _ := DockerCallRuntimeApi("GET", url, nil)
+  type DockerListResp struct {
+    List []struct {
+      Id string
+    }
+  }
+  j := DockerListResp{}
+  b := bytes.NewReader(body)
+	json.NewDecoder(b).Decode(&j)
+
+  //ADD VERIFICATION HERE!!!!!!!!!!!!!
+
+  for _, container := range j.List {
+    containerList = append(containerList, container.Id)
+  }
+
+  return containerList, nil
+}
+
+func DockerGetId(ContainerName string) (Id string, err error) {
+  url := "http://d/containers/" + ContainerName + "/json"
+  body, _ := DockerCallRuntimeApi("GET", url, nil)
+  type DockerStatusResp struct {
+    Id string
+  }
+  j := DockerStatusResp{}
+  b := bytes.NewReader(body)
+	json.NewDecoder(b).Decode(&j)
+  //ADD VERIFICATION HERE!!!!!!!!!!!!!
+
+  return j.Id, nil
+}
+
 func DockerStartContainer(ContainerId string) error{
   url := "http://d/containers/" + ContainerId + "/start"
   body, _ := DockerCallRuntimeApi("POST", url, bytes.NewBuffer([]byte(`{	}`)))

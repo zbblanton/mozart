@@ -151,6 +151,11 @@ type ControllerMsg struct {
   Retries uint
 }
 
+type ControllerReconnectMsg struct {
+  worker Worker
+  disconnectTime time.Time
+}
+
 /*
 type NodeListResp struct {
   Success bool `json:"success"`
@@ -296,12 +301,14 @@ func selectWorker() (w Worker, err error) {
   //Scan containers and get what workers they are using.
   for _, container := range containers.Containers {
     //Check if worker is already in map, if so increment it's counter
-    if _, ok := workerPool[container.Worker]; ok {
-      curr := workerPool[container.Worker]
-      curr = curr + 1
-      workerPool[container.Worker] = curr
-    } else {
-      workerPool[container.Worker] = 1
+    if workers.Workers[container.Worker].Status != "disconnected" {  
+      if _, ok := workerPool[container.Worker]; ok {
+        curr := workerPool[container.Worker]
+        curr = curr + 1
+        workerPool[container.Worker] = curr
+      } else {
+        workerPool[container.Worker] = 1
+      }
     }
   }
 
