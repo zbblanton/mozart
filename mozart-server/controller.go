@@ -106,6 +106,7 @@ func containerControllerStart(c ContainerConfig) bool {
 
 func containerControllerMove(c Container) bool {
   c.State = "moving"
+  c.Worker = ""
 
   //Save container
   containers.mux.Lock()
@@ -202,15 +203,18 @@ func workerControllerRetryQueue(messages chan ControllerMsg) {
 
 func workerControllerExecutor(msg ControllerMsg) bool{
   //Case for each command, run the function matching the command and struct type
+  fmt.Println("Controller executing action:", msg.Action)
   switch msg.Action {
     case "reconnect":
       worker := msg.Data.(ControllerReconnectMsg).worker
       currentTime := time.Now()
       //disconnectTime := msg.Data.timesomething.Add(time.Minute)
       disconnectTime := msg.Data.(ControllerReconnectMsg).disconnectTime
-      if(currentTime.Sub(disconnectTime).Minutes() >= 1){
+      if(currentTime.Sub(disconnectTime).Seconds() >= 60){
         worker.Status = "disconnected"
         workers.Workers[worker.AgentIp] = worker
+
+        fmt.Println("Worker", worker.AgentIp, "has been set to disconnected.")
 
         //Move all containers on this worker
         for _, container := range containers.Containers {
@@ -223,6 +227,7 @@ func workerControllerExecutor(msg ControllerMsg) bool{
       if(checkWorkerHealth(worker.AgentIp, worker.AgentPort)){
         worker.Status = "connected"
         workers.Workers[worker.AgentIp] = worker
+        fmt.Println("Worker", worker.AgentIp, "has been set to connected.")
         return true
       } else {
         return false

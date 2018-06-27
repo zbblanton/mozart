@@ -189,8 +189,8 @@ var config = Config{}
   ServerKey: "/etc/mozart/ssl/testcluster1-server.key"}
 */
 
-var workerQueue = make(chan interface{}, 3)
-var workerRetryQueue = make(chan interface{}, 3)
+var workerQueue = make(chan ControllerMsg, 3)
+var workerRetryQueue = make(chan ControllerMsg, 3)
 var workers = Workers{
   Workers: make(map[string]Worker)}
 
@@ -296,12 +296,14 @@ func selectWorker() (w Worker, err error) {
     }
   }
 
+  fmt.Println("List of workers to consider:", workers.Workers)
+
   workerPool := make(map[string]uint)
 
   //Scan containers and get what workers they are using.
   for _, container := range containers.Containers {
     //Check if worker is already in map, if so increment it's counter
-    if workers.Workers[container.Worker].Status != "disconnected" {  
+    if workers.Workers[container.Worker].Status != "disconnected" {
       if _, ok := workerPool[container.Worker]; ok {
         curr := workerPool[container.Worker]
         curr = curr + 1
@@ -331,11 +333,19 @@ func selectWorker() (w Worker, err error) {
       }
 
     } else {
+      if worker.Status == "disconnected" {
+        return Worker{}, errors.New("Could not find a worker!")
+      }
       lowestWorker = worker.AgentIp
       //lowestContainers = numContainers
       break
     }
   }
+
+  //if lowestWorker == "" {
+    //return Worker{}, errors.New("Could not find a worker!")
+  //}
+
   fmt.Println("Worker", lowestWorker,"selected.")
 
   return workers.Workers[lowestWorker], nil
@@ -571,6 +581,9 @@ func main() {
   //go controllerContainers()
   go containerControllerQueue(containerQueue)
   go containerControllerRetryQueue(containerRetryQueue)
+
+  go workerControllerQueue(workerQueue)
+  go workerControllerRetryQueue(workerRetryQueue)
 
   //Start API server
   fmt.Println("Starting API server...")

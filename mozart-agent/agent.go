@@ -222,8 +222,9 @@ func stopAllMozartContainers() {
   if err != nil {
     panic("Could not get list of mozart containers on host")
   }
-
+  fmt.Println("Stopping mozart containers that should not be running.")
   for _, containerId := range list {
+    //fmt.Println("Stopping container:", containerId)
     DockerStopContainer(containerId)
   }
 }

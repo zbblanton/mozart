@@ -84,20 +84,28 @@ func DockerCreateContainer(ContainerName string, Container DockerContainerConfig
 }
 
 func DockerList() (containerList []string, err error) {
-  url := "http://d/containers/" + "/json"
-  body, _ := DockerCallRuntimeApi("GET", url, nil)
-  type DockerListResp struct {
+  url := "http://d/containers/" + "json?filters=%7B%22label%22%3A%5B%22mozart%22%5D%7D"
+  //url := "http://d/containers/" + "json"
+  body, err := DockerCallRuntimeApi("GET", url, nil)
+  if err != nil {
+    fmt.Println("Error trying to get docker list:", err)
+  }
+  /*type DockerListResp struct {
     List []struct {
       Id string
     }
+  }*/
+  type DockerListItem struct {
+    Id string
   }
-  j := DockerListResp{}
+  j := []DockerListItem{}
   b := bytes.NewReader(body)
 	json.NewDecoder(b).Decode(&j)
-
+  //fmt.Println(j)
   //ADD VERIFICATION HERE!!!!!!!!!!!!!
 
-  for _, container := range j.List {
+  for _, container := range j {
+    //fmt.Println("Container:", container)
     containerList = append(containerList, container.Id)
   }
 
