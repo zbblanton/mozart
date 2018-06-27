@@ -290,27 +290,35 @@ func selectWorker() (w Worker, err error) {
     return Worker{}, errors.New("No workers!")
   }
 
+  /*
+  //Check if this is the first container to be created.
   if(len(containers.Containers) == 0){
     for _, worker := range workers.Workers {
-      return worker, nil
+      if worker.Status == "connected" || worker.Status == "active" {
+        fmt.Println("Worker", worker.AgentIp, "selected.")
+        return worker, nil
+      }
     }
   }
+  */
 
   fmt.Println("List of workers to consider:", workers.Workers)
 
   workerPool := make(map[string]uint)
 
-  //Scan containers and get what workers they are using.
+  //Add all workers that are active to the worker pool.
+  for _, worker := range workers.Workers {
+    if worker.Status == "connected" || worker.Status == "active" {
+      workerPool[worker.AgentIp] = 0
+    }
+  }
+
+  //Scan containers how many containers each worker is hosting
   for _, container := range containers.Containers {
-    //Check if worker is already in map, if so increment it's counter
-    if workers.Workers[container.Worker].Status != "disconnected" {
-      if _, ok := workerPool[container.Worker]; ok {
-        curr := workerPool[container.Worker]
-        curr = curr + 1
-        workerPool[container.Worker] = curr
-      } else {
-        workerPool[container.Worker] = 1
-      }
+    if _, ok := workerPool[container.Worker]; ok {
+      curr := workerPool[container.Worker]
+      curr = curr + 1
+      workerPool[container.Worker] = curr
     }
   }
 
@@ -318,36 +326,26 @@ func selectWorker() (w Worker, err error) {
   firstRun := true
   lowestWorker := ""
   var lowestContainers uint = 0
-  for _, worker := range workers.Workers {
-    if _, ok := workerPool[worker.AgentIp]; ok {
+  for workerIp, numContainers := range workerPool {
+    //If a worker in the pool has no containers, return it.
+    if numContainers == 0 {
+      fmt.Println("Worker", workerIp, "selected.")
+      return workers.Workers[workerIp], nil
+    }
 
-      if(firstRun){
-        firstRun = false
-        lowestContainers = workerPool[worker.AgentIp]
-        lowestWorker = worker.AgentIp
-      }
+    if(firstRun){
+      firstRun = false
+      lowestContainers = numContainers
+      lowestWorker = workerIp
+    }
 
-      if(workerPool[worker.AgentIp] < lowestContainers) {
-        lowestWorker = worker.AgentIp
-        lowestContainers = workerPool[worker.AgentIp]
-      }
-
-    } else {
-      if worker.Status == "disconnected" {
-        return Worker{}, errors.New("Could not find a worker!")
-      }
-      lowestWorker = worker.AgentIp
-      //lowestContainers = numContainers
-      break
+    if(numContainers < lowestContainers) {
+      lowestWorker = workerIp
+      lowestContainers = numContainers
     }
   }
 
-  //if lowestWorker == "" {
-    //return Worker{}, errors.New("Could not find a worker!")
-  //}
-
   fmt.Println("Worker", lowestWorker,"selected.")
-
   return workers.Workers[lowestWorker], nil
 }
 
