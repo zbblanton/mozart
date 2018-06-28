@@ -8,6 +8,11 @@ import(
 	"encoding/json"
 	"net/http"
   "fmt"
+  //"net/url"
+
+  "github.com/docker/docker/api/types"
+	"github.com/docker/docker/client"
+	"golang.org/x/net/context"
 )
 
 func ConvertContainerConfigToDockerContainerConfig(c ContainerConfig) DockerContainerConfig {
@@ -124,6 +129,36 @@ func DockerGetId(ContainerName string) (Id string, err error) {
   //ADD VERIFICATION HERE!!!!!!!!!!!!!
 
   return j.Id, nil
+}
+
+func DockerPullImage(imageName string) error {
+  /*encodedImageName := url.QueryEscape(imageName)
+  url := "http://d/images/create?fromImage=" + encodedImageName
+  _, err := DockerCallRuntimeApi("POST", url, bytes.NewBuffer([]byte(`{ }`)))
+  //fmt.Println(string(body[:]))
+  if err != nil {
+    //fmt.Println("Error trying to pull image:", string(body[:]))
+  }
+  return err*/
+
+  ctx := context.Background()
+	//cli, err := client.NewEnvClient()
+  cli, err := client.NewClientWithOpts(client.WithVersion("1.37"))
+	if err != nil {
+		panic(err)
+	}
+
+	out, err := cli.ImagePull(ctx, imageName, types.ImagePullOptions{})
+	if err != nil {
+		panic(err)
+	}
+  //We use bufio and readALL to force a wait on our image pull
+  fmt.Println("Pulling image if needed...")
+  reader := bufio.NewReader(out)
+  ioutil.ReadAll(reader)
+	out.Close()
+  fmt.Println("Image ready.")
+  return err
 }
 
 func DockerStartContainer(ContainerId string) error{

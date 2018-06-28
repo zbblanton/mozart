@@ -111,6 +111,8 @@ func containerControllerExecutor(msg ControllerMsg) bool{
       containers.mux.Unlock()
       //Convert container
       dockerContainer := ConvertContainerConfigToDockerContainerConfig(msg.Config)
+      fmt.Println("Need to pull down the image:", msg.Config.Image)
+      DockerPullImage(msg.Config.Image)
       id, _ := DockerCreateContainer(msg.Name, dockerContainer)
       fmt.Print(id)
       DockerStartContainer(id)
@@ -120,14 +122,15 @@ func containerControllerExecutor(msg ControllerMsg) bool{
     case "recreate":
       //msg := msg.Data.(Container)
       container := msg.Data.(Container)
-      if(msg.Retries < 3){
+      //if(msg.Retries < 3){
         dockerContainer := ConvertContainerConfigToDockerContainerConfig(container.Config)
+        DockerPullImage(container.Config.Image)
         id, _ := DockerCreateContainer(container.Name, dockerContainer)
         fmt.Print(id)
         DockerStartContainer(id)
         containerControllerUpdateStateWithMux(container.Name, "running", *serverPtr)
         return true
-      }
+      //}
       //send reschedule to master and delete this container from the map.
     case "stop":
       msg := msg.Data.(string)
