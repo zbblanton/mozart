@@ -211,8 +211,8 @@ func clusterCreate(c *cli.Context) {
 
 	fmt.Printf("\n\n\n")
 	fmt.Println("Once the server has been set up, add workers by running this command:")
-	fmt.Printf("mozart-agent --server=%s --agent=INSERT_AGENT_IP --key=%s --ca-hash=%s", server, joinKey, caHash)
-	//fmt.Printf("mozart-agent --server=", server, "agent=INSERT_AGENT_IP --key=", joinKey, "--ca-hash=", caHash)
+	//fmt.Printf("mozart-agent --server=%s --agent=INSERT_AGENT_IP --key=%s --ca-hash=%s", server, joinKey, caHash)
+	fmt.Printf(`docker run --name mozart-agent -d --rm --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 49433:49433 -e "MOZART_SERVER_IP=%s" -e "MOZART_AGENT_IP=INSERT_HOST_IP_HERE" -e "MOZART_JOIN_KEY=%s" -e "MOZART_CA_HASH=%s" zbblanton/mozart-agent`, server, joinKey, caHash)
 	fmt.Printf("\n\n\n")
 }
 
@@ -224,7 +224,8 @@ func clusterPrint(c *cli.Context) {
 
 	fmt.Printf("\n\n\n")
 	fmt.Println("Once the server has been set up, add workers by running this command:")
-	fmt.Printf("mozart-agent --server=%s --agent=INSERT_AGENT_IP --key=%s --ca-hash=%s", config.ServerIp, config.AgentJoinKey, caHash)
+	//fmt.Printf("mozart-agent --server=%s --agent=INSERT_AGENT_IP --key=%s --ca-hash=%s", config.ServerIp, config.AgentJoinKey, caHash)
+	fmt.Printf(`docker run --name mozart-agent -d --rm --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 49433:49433 -e "MOZART_SERVER_IP=%s" -e "MOZART_AGENT_IP=INSERT_HOST_IP_HERE" -e "MOZART_JOIN_KEY=%s" -e "MOZART_CA_HASH=%s" zbblanton/mozart-agent`, config.ServerIp, config.AgentJoinKey, caHash)
 	fmt.Printf("\n\n\n")
 }
 

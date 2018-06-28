@@ -151,6 +151,10 @@ func joinAgent(serverIp string, agentIp string, joinKey string, agentCaHash stri
 	if err != nil {
 		fmt.Println("error:", err)
 	}
+  if !joinResp.Success {
+    fmt.Println("Error:", joinResp.Error)
+    os.Exit(1)
+  }
   fmt.Println("The secured join request response: ", joinResp)
 
   if len(joinResp.Containers) == 0 {
