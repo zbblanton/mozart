@@ -167,6 +167,8 @@ type Resp struct {
   Error string `json:"error"`
 }
 
+var ds = &FileDataStore{Path: "mozart.db"}
+
 var counter = 1
 //var workers = []string{"10.0.0.33:8080", "10.0.0.67:8080"}
 
@@ -283,70 +285,6 @@ func readFile(dataClass string, file string) {
       panic("cant decode")
     }
   }
-}
-
-func selectWorker() (w Worker, err error) {
-  if(len(workers.Workers) == 0){
-    return Worker{}, errors.New("No workers!")
-  }
-
-  /*
-  //Check if this is the first container to be created.
-  if(len(containers.Containers) == 0){
-    for _, worker := range workers.Workers {
-      if worker.Status == "connected" || worker.Status == "active" {
-        fmt.Println("Worker", worker.AgentIp, "selected.")
-        return worker, nil
-      }
-    }
-  }
-  */
-
-  fmt.Println("List of workers to consider:", workers.Workers)
-
-  workerPool := make(map[string]uint)
-
-  //Add all workers that are active to the worker pool.
-  for _, worker := range workers.Workers {
-    if worker.Status == "connected" || worker.Status == "active" {
-      workerPool[worker.AgentIp] = 0
-    }
-  }
-
-  //Scan containers how many containers each worker is hosting
-  for _, container := range containers.Containers {
-    if _, ok := workerPool[container.Worker]; ok {
-      curr := workerPool[container.Worker]
-      curr = curr + 1
-      workerPool[container.Worker] = curr
-    }
-  }
-
-  //Find the lowest used worker
-  firstRun := true
-  lowestWorker := ""
-  var lowestContainers uint = 0
-  for workerIp, numContainers := range workerPool {
-    //If a worker in the pool has no containers, return it.
-    if numContainers == 0 {
-      fmt.Println("Worker", workerIp, "selected.")
-      return workers.Workers[workerIp], nil
-    }
-
-    if(firstRun){
-      firstRun = false
-      lowestContainers = numContainers
-      lowestWorker = workerIp
-    }
-
-    if(numContainers < lowestContainers) {
-      lowestWorker = workerIp
-      lowestContainers = numContainers
-    }
-  }
-
-  fmt.Println("Worker", lowestWorker,"selected.")
-  return workers.Workers[lowestWorker], nil
 }
 
 func checkWorkerHealth(workerIp string, workerPort string) bool {
@@ -521,6 +459,10 @@ func callSecuredAgent(pubKey, privKey, ca []byte, method string, url string, bod
 }
 
 func main() {
+  ds.Init()
+  defer ds.Close()
+
+
   configPtr := flag.String("config", "", "Path to config file. (Default: /etc/mozart/config.json)")
   flag.Parse()
   //Make sure server flag is given.
@@ -541,6 +483,7 @@ func main() {
   }
   */
 
+  /*
   //Load/Create workers data
   if _, err := os.Stat("workers.data"); os.IsNotExist(err) {
     fmt.Println("Workers file does not exist. Creating file...")
@@ -558,6 +501,7 @@ func main() {
     fmt.Println("Containers file exist. Reading file...")
 		readFile("containers", "containers.data")
   }
+  */
 
   //Load Certs into memory
   err := errors.New("")
