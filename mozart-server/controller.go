@@ -1,7 +1,7 @@
 package main
 
 import(
-  "os"
+  //"os"
   "fmt"
   "time"
   "bytes"
@@ -66,25 +66,50 @@ func containerControllerStart(c ContainerConfig) bool {
     Config: c}
 
     //Save container
-    containers.mux.Lock()
-    //config.Containers = append(config.Containers, newContainer)
-    containers.Containers[c.Name] = newContainer
-    writeFile("containers", "containers.data")
-    containers.mux.Unlock()
+    c1, err := json.Marshal(newContainer)
+    if err != nil {
+      panic(err)
+    }
+    ds.Put("mozart/containers/" + newContainer.Name, c1)
+    //containers.mux.Lock()
+    ////config.Containers = append(config.Containers, newContainer)
+    //containers.Containers[c.Name] = newContainer
+    //writeFile("containers", "containers.data")
+    //containers.mux.Unlock()
 
-    worker, err := selectWorker()
+    selectedWorker, err := selectWorker()
     if err != nil {
       fmt.Println("Error:", err)
       return false
     }
-    newContainer.Worker = worker.AgentIp
+    newContainer.Worker = selectedWorker.AgentIp
+    //fmt.Println("Worker:", worker.AgentIp)
 
     //Save container
-    containers.mux.Lock()
-    //config.Containers = append(config.Containers, newContainer)
-    containers.Containers[c.Name] = newContainer
-    writeFile("containers", "containers.data")
-    containers.mux.Unlock()
+    c1, err = json.Marshal(newContainer)
+    if err != nil {
+      panic(err)
+    }
+    ds.Put("mozart/containers/" + newContainer.Name, c1)
+
+    //Update workers container run list
+    var worker Worker
+    workerBytes, _ := ds.Get("mozart/workers/" + newContainer.Worker)
+    err = json.Unmarshal(workerBytes, &worker)
+    if err != nil {
+      panic(err)
+    }
+    worker.Containers[newContainer.Name] = newContainer.Name
+    workerToBytes, err := json.Marshal(worker)
+    if err != nil {
+      panic(err)
+    }
+    ds.Put("mozart/workers/" + newContainer.Worker, workerToBytes)
+    //containers.mux.Lock()
+    ////config.Containers = append(config.Containers, newContainer)
+    //containers.Containers[c.Name] = newContainer
+    //writeFile("containers", "containers.data")
+    //containers.mux.Unlock()
 
   //Will need to add support for the worker key!!!!!
   type CreateReq struct {
@@ -105,15 +130,35 @@ func containerControllerStart(c ContainerConfig) bool {
 }
 
 func containerControllerMove(c Container) bool {
+  //Remove container from workers container run list
+  var oldWorker Worker
+  workerBytes, _ := ds.Get("mozart/workers/" + c.Worker)
+  err := json.Unmarshal(workerBytes, &oldWorker)
+  if err != nil {
+    panic(err)
+  }
+  delete(oldWorker.Containers, c.Name)
+  workerToBytes, err := json.Marshal(oldWorker)
+  if err != nil {
+    panic(err)
+  }
+  ds.Put("mozart/workers/" + c.Worker, workerToBytes)
+
+  //Clear worker
   c.State = "moving"
   c.Worker = ""
 
   //Save container
-  containers.mux.Lock()
-  //config.Containers = append(config.Containers, newContainer)
-  containers.Containers[c.Name] = c
-  writeFile("containers", "containers.data")
-  containers.mux.Unlock()
+  c1, err := json.Marshal(c)
+  if err != nil {
+    panic(err)
+  }
+  ds.Put("mozart/containers/" + c.Name, c1)
+  // containers.mux.Lock()
+  // //config.Containers = append(config.Containers, newContainer)
+  // containers.Containers[c.Name] = c
+  // writeFile("containers", "containers.data")
+  // containers.mux.Unlock()
 
   worker, err := selectWorker()
   if err != nil {
@@ -123,11 +168,30 @@ func containerControllerMove(c Container) bool {
   c.Worker = worker.AgentIp
 
   //Save container
-  containers.mux.Lock()
-  //config.Containers = append(config.Containers, newContainer)
-  containers.Containers[c.Name] = c
-  writeFile("containers", "containers.data")
-  containers.mux.Unlock()
+  c1, err = json.Marshal(c)
+  if err != nil {
+    panic(err)
+  }
+  ds.Put("mozart/containers/" + c.Name, c1)
+
+  //Update workers container run list
+  //var worker Worker
+  workerBytes, _ = ds.Get("mozart/workers/" + c.Worker)
+  err = json.Unmarshal(workerBytes, &worker)
+  if err != nil {
+    panic(err)
+  }
+  worker.Containers[c.Name] = c.Name
+  workerToBytes, err = json.Marshal(worker)
+  if err != nil {
+    panic(err)
+  }
+  ds.Put("mozart/workers/" + c.Worker, workerToBytes)
+  // containers.mux.Lock()
+  // //config.Containers = append(config.Containers, newContainer)
+  // containers.Containers[c.Name] = c
+  // writeFile("containers", "containers.data")
+  // containers.mux.Unlock()
 
   //Will need to add support for the worker key!!!!!
   type CreateReq struct {
@@ -149,16 +213,33 @@ func containerControllerMove(c Container) bool {
 
 func containerControllerStop(name string) bool {
   //Update container desired state
-  containers.mux.Lock()
-  container := containers.Containers[name]
+  // containers.mux.Lock()
+  // container := containers.Containers[name]
+  // container.DesiredState = "stopped"
+  // containers.Containers[name] = container
+  // writeFile("containers", "containers.data")
+  // containers.mux.Unlock()
+  //Get container
+  var container Container
+  c, _ := ds.Get("mozart/containers/" + name)
+  err := json.Unmarshal(c, &container)
+  if err != nil {
+    panic(err)
+  }
+  //Change desired state
   container.DesiredState = "stopped"
-  containers.Containers[name] = container
-  writeFile("containers", "containers.data")
-  containers.mux.Unlock()
+  //Save new desired state
+  b2, err := json.Marshal(container)
+  if err != nil {
+    panic(err)
+  }
+  ds.Put("mozart/containers/" + name, b2)
+
+
 
   //Will need to add support for the worker key!!!!!
   url := "https://" + container.Worker + ":49433" + "/stop/" + container.Name
-  _, err := callSecuredAgent(serverTlsCert, serverTlsKey, caTlsCert, "GET", url, nil)
+  _, err = callSecuredAgent(serverTlsCert, serverTlsKey, caTlsCert, "GET", url, nil)
   if err != nil {
 		//panic(err)
     return false
@@ -212,21 +293,47 @@ func workerControllerExecutor(msg ControllerMsg) bool{
       disconnectTime := msg.Data.(ControllerReconnectMsg).disconnectTime
       if(currentTime.Sub(disconnectTime).Seconds() >= 60){
         worker.Status = "disconnected"
-        workers.Workers[worker.AgentIp] = worker
+        //workers.Workers[worker.AgentIp] = worker
+        //Save worker
+        w1, err := json.Marshal(worker)
+        if err != nil {
+          panic(err)
+        }
+        ds.Put("mozart/workers/" + worker.AgentIp, w1)
 
         fmt.Println("Worker", worker.AgentIp, "has been set to disconnected.")
 
-        //Move all containers on this worker
-        for _, container := range containers.Containers {
-          if container.Worker == worker.AgentIp {
-            containerQueue <- container
+        //Get worker container run list
+        var worker Worker
+        workerBytes, _ := ds.Get("mozart/workers/" + worker.AgentIp)
+        if workerBytes != nil {
+          err = json.Unmarshal(workerBytes, &worker)
+          if err != nil {
+            panic(err)
           }
+        }
+
+        //Move all containers on this worker
+        for _, containerName := range worker.Containers {
+          var container Container
+          c, _ := ds.Get("mozart/containers/" + containerName)
+          err = json.Unmarshal(c, &container)
+          if err != nil {
+            panic(err)
+          }
+          containerQueue <- container
         }
         return true
       }
       if(checkWorkerHealth(worker.AgentIp, worker.AgentPort)){
         worker.Status = "connected"
-        workers.Workers[worker.AgentIp] = worker
+        //Save worker
+        w1, err := json.Marshal(worker)
+        if err != nil {
+          panic(err)
+        }
+        ds.Put("mozart/workers/" + worker.AgentIp, w1)
+        //workers.Workers[worker.AgentIp] = worker
         fmt.Println("Worker", worker.AgentIp, "has been set to connected.")
         return true
       } else {
@@ -250,7 +357,7 @@ func workerControllerExecutor(msg ControllerMsg) bool{
 
 
 
-
+/*
 func controllerContainersStart(c Container){
   //Will need to add support for the worker key!!!!!
   type CreateReq struct {
@@ -318,3 +425,4 @@ func controllerContainers() {
   }
   os.Exit(1) //In case the for loop exits, stop the whole program.
 }
+*/

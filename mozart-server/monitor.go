@@ -42,7 +42,7 @@ func monitorWorkers() {
           if err != nil {
             panic(err)
           }
-          ds.Put(index, b)
+          ds.Put("mozart/workers/" + index, b)
           ///////////////////////////////////////////
           data := ControllerReconnectMsg{worker: worker, disconnectTime: time.Now()}
           q := ControllerMsg{Action: "reconnect", Data: data}

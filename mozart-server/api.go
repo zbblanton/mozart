@@ -80,8 +80,30 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
     return
   }
 
+  // //Create worker map
+  // workers := make(map[string]Worker)
+  //
+  // //Get all workers
+  // dataBytes, _ := ds.GetByPrefix("mozart/workers")
+  // for k, v := range dataBytes {
+  //   var data Worker
+  //   err := json.Unmarshal(v, &data)
+  //   if err != nil {
+  //     panic(err)
+  //   }
+  //   workers[k] = data
+  // }
+
   //Check if worker exist and if it has an active or maintenance status
-  if worker, ok := workers.Workers[j.AgentIp]; ok {
+  //if worker, ok := workers["mozart/workers/" + j.AgentIp]; ok {
+  var worker Worker
+  workerBytes, _ := ds.Get("mozart/workers/" + j.AgentIp)
+  if workerBytes != nil {
+    err := json.Unmarshal(workerBytes, &worker)
+    if err != nil {
+      panic(err)
+    }
+
     if(worker.Status == "active" || worker.Status == "connected" || worker.Status == "maintenance"){
       resp := NodeJoinResp{ServerKey: "", Success: false, Error: "Host already exist and has an active or maintenance status. (This is okay if host is rejoining, just retry until it reconnects!)"}
       json.NewEncoder(w).Encode(resp)
@@ -99,21 +121,68 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
   }
   serverKey := base64.URLEncoding.EncodeToString(randKey)
   //Save key to config
-  newWorker := Worker{AgentIp: j.AgentIp, AgentPort: "49433", ServerKey: serverKey, AgentKey: j.AgentKey, Status: "active"}
-  workers.mux.Lock()
-  workers.Workers[j.AgentIp] = newWorker
-  writeFile("workers", "workers.data")
-  workers.mux.Unlock()
+  var newWorker Worker
+  if workerBytes == nil {
+    newWorker = Worker{AgentIp: j.AgentIp, AgentPort: "49433", ServerKey: serverKey, AgentKey: j.AgentKey, Containers: make(map[string]string), Status: "active"}
+  } else {
+    newWorker = Worker{AgentIp: j.AgentIp, AgentPort: "49433", ServerKey: serverKey, AgentKey: j.AgentKey, Containers: worker.Containers, Status: "active"}
+  }
+
+  //workers.mux.Lock()
+  //workers.Workers[j.AgentIp] = newWorker
+  //writeFile("workers", "workers.data")
+  //workers.mux.Unlock()
+  b, err := json.Marshal(newWorker)
+  if err != nil {
+    panic(err)
+  }
+  ds.Put("mozart/workers/" + j.AgentIp, b)
+
+  // //Get worker container run list
+  // var worker Worker
+  // workerBytes, _ := ds.Get("mozart/workers/" + j.AgentIp)
+  // if workerBytes != nil {
+  //   err = json.Unmarshal(workerBytes, &worker)
+  //   if err != nil {
+  //     panic(err)
+  //   }
+  // }
+
+  //Create containers map
+  workerContainers := make(map[string]Container)
+
+  //Get each container and add to map
+  for _, containerName := range worker.Containers {
+    var container Container
+    c, _ := ds.Get("mozart/containers/" + containerName)
+    err = json.Unmarshal(c, &container)
+    if err != nil {
+      panic(err)
+    }
+    workerContainers[containerName] = container
+  }
+  /*
+  //Get containers
+  dataBytes, _ = ds.GetByPrefix("mozart/containers")
+  for k, v := range dataBytes {
+    var data Container
+    err = json.Unmarshal(v, &data)
+    if err != nil {
+      panic(err)
+    }
+    containers[k] = data
+  }
 
   //Send containers and key to worker
   workerContainers := make(map[string]Container)
-  containers.mux.Lock()
-  for _, container := range containers.Containers {
+  //containers.mux.Lock()
+  for _, container := range containers {
     if container.Worker == j.AgentIp {
       workerContainers[container.Name] = container
     }
   }
-  containers.mux.Unlock()
+  */
+  //containers.mux.Unlock()
   resp := NodeJoinResp{ServerKey: serverKey, Containers: workerContainers, Success: true, Error: ""}
   json.NewEncoder(w).Encode(resp)
 }
@@ -157,8 +226,8 @@ func ContainersStopHandler(w http.ResponseWriter, r *http.Request) {
   }
 
   //Check if container exist
-  containers.mux.Lock()
-  if _, ok := containers.Containers[containerName]; !ok {
+  //containers.mux.Lock()
+  if ok, _ := ds.ifExist("mozart/containers/" + containerName); !ok {
     resp := Resp{false, "Cannot find container"}
     json.NewEncoder(w).Encode(resp)
   } else {
@@ -167,7 +236,7 @@ func ContainersStopHandler(w http.ResponseWriter, r *http.Request) {
     //Add to queue
     containerQueue <- containerName
   }
-  containers.mux.Unlock()
+  //containers.mux.Unlock()
 
   /*
   err := schedulerStopContainer(containerName)
@@ -194,17 +263,42 @@ func ContainersStateUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewDecoder(r.Body).Decode(&j)
 
   //TODO: Verify Worker Key here, the container must live on this host.
-  containers.mux.Lock()
+  //containers.mux.Lock()
   fmt.Print(j)
-  if j.State == "stopped" && containers.Containers[j.ContainerName].DesiredState == "stopped" {
-    delete(containers.Containers, j.ContainerName)
-  } else {
-    c := containers.Containers[j.ContainerName]
-    c.State = j.State
-    fmt.Print(c)
-    containers.Containers[j.ContainerName] = c
+  var container Container
+  c, _ := ds.Get("mozart/containers/" + j.ContainerName)
+  err := json.Unmarshal(c, &container)
+  if err != nil {
+    panic(err)
   }
-  containers.mux.Unlock()
+  if j.State == "stopped" && container.DesiredState == "stopped" {
+    //delete(containers.Containers, j.ContainerName)
+    ds.Del("mozart/containers/" + container.Name)
+    //Update worker container run list
+    var worker Worker
+    workerBytes, _ := ds.Get("mozart/workers/" + container.Worker)
+    err = json.Unmarshal(workerBytes, &worker)
+    if err != nil {
+      panic(err)
+    }
+    delete(worker.Containers, container.Name)
+    workerToBytes, err := json.Marshal(worker)
+    if err != nil {
+      panic(err)
+    }
+    ds.Put("mozart/workers/" + container.Worker, workerToBytes)
+  } else {
+    //c := containers.Containers[j.ContainerName]
+    container.State = j.State
+    fmt.Print(container)
+    //containers.Containers[j.ContainerName] = c
+    b, err := json.Marshal(container)
+    if err != nil {
+      panic(err)
+    }
+    ds.Put("mozart/containers/" + container.Name, b)
+  }
+  //containers.mux.Unlock()
 
   resp := Resp{true, ""}
   json.NewEncoder(w).Encode(resp)
@@ -215,10 +309,23 @@ func ContainersListHandler(w http.ResponseWriter, r *http.Request) {
   w.WriteHeader(http.StatusOK)
   defer r.Body.Close()
 
-  resp := ContainerListResp{containers.Containers, true, ""}
+  containers := make(map[string]Container)
+
+  //Get containers
+  dataBytes, _ := ds.GetByPrefix("mozart/containers")
+  for k, v := range dataBytes {
+    var data Container
+    err := json.Unmarshal(v, &data)
+    if err != nil {
+      panic(err)
+    }
+    containers[k] = data
+  }
+
+  resp := ContainerListResp{containers, true, ""}
   json.NewEncoder(w).Encode(resp)
 }
-
+/*
 func ContainersListWorkersHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "application/json; charset=UTF-8")
   w.WriteHeader(http.StatusOK)
@@ -250,7 +357,7 @@ func NodeListHandler(w http.ResponseWriter, r *http.Request) {
   resp := NodeListResp{workers.Workers, true, ""}
   json.NewEncoder(w).Encode(resp)
 }
-
+*/
 func startJoinServer(serverIp string, joinPort string, caCert string, serverCert string, serverKey string){
   router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/", NodeInitialJoinHandler)
@@ -274,12 +381,12 @@ func startApiServer(serverIp string, serverPort string, caCert string, serverCer
   router.HandleFunc("/containers/create", ContainersCreateHandler)
   router.HandleFunc("/containers/stop/{container}", ContainersStopHandler)
   router.HandleFunc("/containers/list", ContainersListHandler)
-  router.HandleFunc("/containers/list/{worker}", ContainersListWorkersHandler)
+  //router.HandleFunc("/containers/list/{worker}", ContainersListWorkersHandler)
   router.HandleFunc("/containers/{container}/state/update", ContainersStateUpdateHandler)
   router.HandleFunc("/containers/status/{container}", RootHandler)
   router.HandleFunc("/containers/inspect/{container}", RootHandler)
 
-  router.HandleFunc("/nodes/list", NodeListHandler)
+  //router.HandleFunc("/nodes/list", NodeListHandler)
   router.HandleFunc("/nodes/list/{type}", RootHandler)
   router.HandleFunc("/nodes/join", NodeJoinHandler)
 

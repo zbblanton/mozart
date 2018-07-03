@@ -64,8 +64,8 @@ func selectWorker() (w Worker, err error) {
   for workerIp, numContainers := range workerPool {
     //If a worker in the pool has no containers, return it.
     if numContainers == 0 {
-      fmt.Println("Worker", workerIp, "selected.")
-      return workers[workerIp], nil
+      fmt.Println("First container so Worker", workerIp, "selected.")
+      return workers["mozart/workers/" + workerIp], nil
     }
 
     if(firstRun){
@@ -81,5 +81,5 @@ func selectWorker() (w Worker, err error) {
   }
 
   fmt.Println("Worker", lowestWorker,"selected.")
-  return workers[lowestWorker], nil
+  return workers["mozart/workers/" + lowestWorker], nil
 }

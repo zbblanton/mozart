@@ -13,7 +13,7 @@ import(
   "fmt"
   "time"
   "sync"
-  "encoding/gob"
+  //"encoding/gob"
 	"encoding/json"
 	"net/http"
   "crypto/rand"
@@ -41,6 +41,7 @@ type Worker struct {
   AgentPort string
   ServerKey string
   AgentKey string
+  Containers map[string]string
   Status string
 }
 
@@ -193,13 +194,13 @@ var config = Config{}
 
 var workerQueue = make(chan ControllerMsg, 3)
 var workerRetryQueue = make(chan ControllerMsg, 3)
-var workers = Workers{
-  Workers: make(map[string]Worker)}
+// var workers = Workers{
+//   Workers: make(map[string]Worker)}
 
 var containerQueue = make(chan interface{}, 3)
 var containerRetryQueue = make(chan interface{}, 3)
-var containers = Containers{
-  Containers: make(map[string]Container)}
+// var containers = Containers{
+//   Containers: make(map[string]Container)}
 
 var serverTlsCert = []byte{}
 var serverTlsKey = []byte{}
@@ -226,7 +227,7 @@ func readConfigFile(file string) {
     panic("cant decode")
   }
 }
-
+/*
 //taken from a google help pack
 //https://groups.google.com/forum/#!topic/golang-nuts/rmKTsGHPjlA
 func writeFile(dataClass string, file string){
@@ -286,7 +287,7 @@ func readFile(dataClass string, file string) {
     }
   }
 }
-
+*/
 func checkWorkerHealth(workerIp string, workerPort string) bool {
   //Will need to add support for the worker key!!!!!
   type Req struct {
