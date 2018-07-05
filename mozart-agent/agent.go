@@ -263,21 +263,21 @@ func main() {
     if env := os.Getenv("MOZART_SERVER_IP"); env == "" {
       log.Fatal("Must provide a server.")
     } else {
-      agentPtr = &env
+      serverPtr = &env
     }
   }
   if(*keyPtr == ""){
     if env := os.Getenv("MOZART_JOIN_KEY"); env == "" {
       log.Fatal("Must provide a join key to join the cluster.")
     } else {
-      agentPtr = &env
+      keyPtr = &env
     }
   }
   if(*caHashPtr == ""){
     if env := os.Getenv("MOZART_CA_HASH"); env == "" {
       log.Fatal("Must provide a CA hash to verify the cluster CA.")
     } else {
-      agentPtr = &env
+      caHashPtr = &env
     }
   }
   fmt.Println("Joining agent to " + *serverPtr + "...")
