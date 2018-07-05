@@ -37,6 +37,10 @@ func selectWorker() (w Worker, err error) {
     }
   }
 
+  if(len(workerPool) == 0){
+    return Worker{}, errors.New("No active workers!")
+  }
+
   //Get containers
   dataBytes, _ = ds.GetByPrefix("mozart/containers")
   for k, v := range dataBytes {

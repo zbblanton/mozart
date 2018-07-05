@@ -304,17 +304,18 @@ func workerControllerExecutor(msg ControllerMsg) bool{
         fmt.Println("Worker", worker.AgentIp, "has been set to disconnected.")
 
         //Get worker container run list
-        var worker Worker
+        var oldWorker Worker
         workerBytes, _ := ds.Get("mozart/workers/" + worker.AgentIp)
         if workerBytes != nil {
-          err = json.Unmarshal(workerBytes, &worker)
+          err = json.Unmarshal(workerBytes, &oldWorker)
           if err != nil {
             panic(err)
           }
         }
+        fmt.Println("The following container(s) will be moved:", oldWorker.Containers)
 
         //Move all containers on this worker
-        for _, containerName := range worker.Containers {
+        for _, containerName := range oldWorker.Containers {
           var container Container
           c, _ := ds.Get("mozart/containers/" + containerName)
           err = json.Unmarshal(c, &container)
