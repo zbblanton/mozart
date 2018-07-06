@@ -143,7 +143,7 @@ func DockerPullImage(imageName string) error {
 
   ctx := context.Background()
 	//cli, err := client.NewEnvClient()
-  cli, err := client.NewClientWithOpts(client.WithVersion("1.37"))
+  cli, err := client.NewClientWithOpts(client.WithVersion("1.33"))
 	if err != nil {
 		panic(err)
 	}
