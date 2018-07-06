@@ -254,7 +254,15 @@ func main() {
   flag.Parse()
   if(*agentPtr == ""){
     if env := os.Getenv("MOZART_AGENT_IP"); env == "" {
-      log.Fatal("Must provide this nodes Hostname or IP.")
+      conn, err := net.Dial("udp", "8.8.8.8:80")
+      if err != nil {
+        log.Fatal(err)
+      }
+      localAddr := conn.LocalAddr().(*net.UDPAddr)
+      *agentPtr = localAddr.IP.String()
+      fmt.Println("No agent IP provided. Automatically selecting:", *agentPtr)
+      conn.Close()
+      //log.Fatal("Must provide this nodes Hostname or IP.")
     } else {
       agentPtr = &env
     }
