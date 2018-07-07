@@ -13,7 +13,6 @@ import(
   "encoding/json"
   "fmt"
   "io/ioutil"
-  "net"
 )
 
 func RootHandler(w http.ResponseWriter, r *http.Request) {
@@ -26,9 +25,6 @@ func NodeInitialJoinHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "application/json; charset=UTF-8")
   w.WriteHeader(http.StatusOK)
   defer r.Body.Close()
-
-  //Get the client IP
-  agentIp,_,_ := net.SplitHostPort(r.RemoteAddr)
 
   j := NodeInitialJoinReq{}
   json.NewDecoder(r.Body).Decode(&j)
@@ -49,7 +45,7 @@ func NodeInitialJoinHandler(w http.ResponseWriter, r *http.Request) {
   }
 
   //Sign the CSR
-  signedCert, err := signCSR(config.CaCert, config.CaKey, csr, agentIp)
+  signedCert, err := signCSR(config.CaCert, config.CaKey, csr, j.AgentIp)
 
   //Prepare signed cert to be sent to agent
   signedCertString := base64.URLEncoding.EncodeToString(signedCert)
@@ -69,9 +65,6 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "application/json; charset=UTF-8")
   w.WriteHeader(http.StatusOK)
   defer r.Body.Close()
-
-  //Get the client IP
-  agentIp,_,_ := net.SplitHostPort(r.RemoteAddr)
 
   j := NodeJoinReq{}
   json.NewDecoder(r.Body).Decode(&j)
@@ -104,7 +97,7 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
   //Check if worker exist and if it has an active or maintenance status
   //if worker, ok := workers["mozart/workers/" + j.AgentIp]; ok {
   var worker Worker
-  workerBytes, _ := ds.Get("mozart/workers/" + agentIp)
+  workerBytes, _ := ds.Get("mozart/workers/" + j.AgentIp)
   if workerBytes != nil {
     err := json.Unmarshal(workerBytes, &worker)
     if err != nil {
@@ -130,9 +123,9 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
   //Save key to config
   var newWorker Worker
   if workerBytes == nil {
-    newWorker = Worker{AgentIp: agentIp, AgentPort: "49433", ServerKey: serverKey, AgentKey: j.AgentKey, Containers: make(map[string]string), Status: "active"}
+    newWorker = Worker{AgentIp: j.AgentIp, AgentPort: "49433", ServerKey: serverKey, AgentKey: j.AgentKey, Containers: make(map[string]string), Status: "active"}
   } else {
-    newWorker = Worker{AgentIp: agentIp, AgentPort: "49433", ServerKey: serverKey, AgentKey: j.AgentKey, Containers: worker.Containers, Status: "active"}
+    newWorker = Worker{AgentIp: j.AgentIp, AgentPort: "49433", ServerKey: serverKey, AgentKey: j.AgentKey, Containers: worker.Containers, Status: "active"}
   }
 
   //workers.mux.Lock()
@@ -143,7 +136,7 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
   if err != nil {
     panic(err)
   }
-  ds.Put("mozart/workers/" + agentIp, b)
+  ds.Put("mozart/workers/" + j.AgentIp, b)
 
   // //Get worker container run list
   // var worker Worker
