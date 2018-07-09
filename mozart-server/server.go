@@ -45,6 +45,15 @@ type Worker struct {
   Status string
 }
 
+type Account struct {
+  Type string
+  Name string
+  Password string
+  AccessKey string
+  SecretKey string
+  Description string
+}
+
 type Workers struct {
   Workers map[string]Worker
   mux sync.Mutex
@@ -131,6 +140,12 @@ type NodeJoinResp struct {
 
 type ContainerListResp struct {
   Containers map[string]Container
+  Success bool `json:"success"`
+  Error string `json:"error"`
+}
+
+type AccountsListResp struct {
+  Accounts map[string]Account
   Success bool `json:"success"`
   Error string `json:"error"`
 }
@@ -534,7 +549,7 @@ func main() {
 
   //Start join server
   fmt.Println("Starting join server...")
-  go startJoinServer(config.ServerIp, "48433", config.CaCert, config.ServerCert, config.ServerKey)
+  go startAccountAndJoinServer(config.ServerIp, "48433", config.CaCert, config.ServerCert, config.ServerKey)
 
   //Bad
   //Bad

@@ -18,6 +18,7 @@ import (
 	"bufio"
 	"github.com/olekukonko/tablewriter"
 	"net"
+	"bytes"
 )
 
 type Config struct {
@@ -55,6 +56,21 @@ type WorkerListResp struct {
 	Workers map[string]Worker
 	Success bool
 	Error string
+}
+
+type Account struct {
+  Type string
+  Name string
+  Password string
+  AccessKey string
+  SecretKey string
+  Description string
+}
+
+type AccountsListResp struct {
+  Accounts map[string]Account
+  Success bool `json:"success"`
+  Error string `json:"error"`
 }
 
 type Resp struct {
@@ -245,8 +261,92 @@ func serviceList(c *cli.Context) {
 	fmt.Println("Feature not yet implemented.")
 }
 
+func accountsCreate(c *cli.Context) {
+	config := readConfigFile("/etc/mozart/config.json")
+
+	accountName := c.Args().First()
+	if(accountName == ""){
+		fmt.Println("Must provide an account name.")
+		return
+	}
+
+	//Generate Access Key
+	randKey := make([]byte, 16)
+  _, err := rand.Read(randKey)
+  if err != nil {
+    fmt.Println("Error generating a key, we are going to exit here due to possible system errors.")
+    os.Exit(1)
+  }
+  accessKey := base64.URLEncoding.EncodeToString(randKey)
+
+	//Generate Secret Key
+	randKey = make([]byte, 64)
+	_, err = rand.Read(randKey)
+	if err != nil {
+		fmt.Println("Error generating a key, we are going to exit here due to possible system errors.")
+		os.Exit(1)
+	}
+	secretKey := base64.URLEncoding.EncodeToString(randKey)
+
+	newAccount := Account{
+    Type: "Service",
+    Name: accountName,
+		AccessKey: accessKey,
+		SecretKey: secretKey}
+
+	b := new(bytes.Buffer)
+  json.NewEncoder(b).Encode(newAccount)
+	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/accounts/create"
+	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "POST", url, b)
+  if err != nil {
+		panic(err)
+	}
+
+	respBody := Resp{}
+  err = json.Unmarshal(resp, &respBody)
+	if err != nil {
+		panic(err)
+	}
+
+	if(!respBody.Success){
+		fmt.Println(respBody.Error)
+	}
+	fmt.Println("Created account for", accountName)
+	fmt.Println("Access Key:", accessKey)
+	fmt.Println("Secret Key:", secretKey)
+	fmt.Println("")
+	fmt.Println("Please save these keys! This is the only time you will see them.")
+}
+
+func accountsList(c *cli.Context) {
+  config := readConfigFile("/etc/mozart/config.json")
+
+	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/accounts/list"
+	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "GET", url, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	respBody := AccountsListResp{}
+	err = json.Unmarshal(resp, &respBody)
+	if err != nil {
+		panic(err)
+	}
+
+	if(!respBody.Success){
+		panic(respBody.Error)
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"Type", "Name", "Description"})
+	for _, c := range respBody.Accounts {
+	   table.Append([]string{c.Type, c.Name, c.Description})
+	}
+	table.Render() // Send output
+}
+
 func containerRun(c *cli.Context) {
-    config := readConfigFile("/etc/mozart/config.json")
+  config := readConfigFile("/etc/mozart/config.json")
 
 	//configPath := c.String("config")
 	configPath := c.Args().First()
@@ -402,6 +502,22 @@ func main() {
 					Name:  "ls",
 					Usage: "List all nodes in a cluster.",
 					Action: nodesList,
+				},
+			},
+		},
+		{
+			Name:        "accounts",
+			Usage:       "Helper commands for accounts.",
+			Subcommands: []cli.Command{
+				{
+					Name:  "create",
+					Usage: "Create an account in a cluster.",
+					Action: accountsCreate,
+				},
+				{
+					Name:  "ls",
+					Usage: "List all the accounts in a cluster.",
+					Action: accountsList,
 				},
 			},
 		},

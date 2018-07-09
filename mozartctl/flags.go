@@ -19,4 +19,9 @@ var (
 		Name:   "config",
 		Usage:  "Container config file.",
 	}
+
+	flagAccountName = cli.StringFlag{
+		Name:   "account",
+		Usage:  "Account name.",
+	}
 )

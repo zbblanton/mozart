@@ -47,7 +47,7 @@ func joinAgent(serverIp string, agentIp string, joinKey string, agentCaHash stri
   json.NewEncoder(b).Encode(j)
   fmt.Println("Sending initial join request...")
 
-  resp, err := callInsecuredServer("POST", "https://" + serverIp + ":48433/", b)
+  resp, err := callInsecuredServer("POST", "https://" + serverIp + ":48433/nodes/initialjoin", b)
   if err != nil {
 		panic(err)
 	}

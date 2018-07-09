@@ -325,6 +325,111 @@ func ContainersListHandler(w http.ResponseWriter, r *http.Request) {
   resp := ContainerListResp{containers, true, ""}
   json.NewEncoder(w).Encode(resp)
 }
+
+func CheckAccountAuth(handler http.HandlerFunc) http.HandlerFunc {
+  return func(w http.ResponseWriter, r *http.Request) {
+    //Parse the form data (Required to use r.PostForm)
+    err := r.ParseForm()
+    if err != nil {
+      resp := Resp{false, "Could not parse POST values."}
+      json.NewEncoder(w).Encode(resp)
+      return
+    }
+
+    //Check if Form values have been provided
+    if len(r.PostForm["account"]) == 0 || len(r.PostForm["access_key"]) == 0 || len(r.PostForm["secret_key"]) == 0 {
+      resp := Resp{false, "Must provide an account, access key, and secret key."}
+      json.NewEncoder(w).Encode(resp)
+      return
+    }
+
+    //Get account from datastore
+    var account Account
+    accountBytes, err := ds.Get("mozart/accounts/" + r.PostForm["account"][0])
+    if accountBytes == nil {
+      resp := Resp{false, "Invalid Auth. Not accounts found. (This warning is temp)"}
+      json.NewEncoder(w).Encode(resp)
+      return
+    }
+    err = json.Unmarshal(accountBytes, &account)
+    if err != nil {
+      resp := Resp{false, "Could not Unmarshal. Invalid Auth."}
+      json.NewEncoder(w).Encode(resp)
+      return
+    }
+
+    //Verify auth
+    if r.PostForm["access_key"][0] != account.AccessKey || r.PostForm["secret_key"][0] != account.SecretKey {
+      resp := Resp{false, "Invalid Auth."}
+      json.NewEncoder(w).Encode(resp)
+      return
+    }
+
+    handler(w, r)
+	}
+}
+
+func AccountsCreateHandler(w http.ResponseWriter, r *http.Request) {
+  w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+  w.WriteHeader(http.StatusOK)
+  defer r.Body.Close()
+
+  /*type AccountCreateReq struct {
+    AccessKey string
+    SecretKey string
+    Account Account
+  }*/
+
+  j := Account{}
+	json.NewDecoder(r.Body).Decode(&j)
+
+  if(j.Name == ""){
+    resp := Resp{false, "Must provide an account name."}
+    json.NewEncoder(w).Encode(resp)
+    return
+  }
+
+  //Check if account exist
+  if ok, _ := ds.ifExist("mozart/accounts/" + j.Name); ok {
+    resp := Resp{false, "Account already exists!"}
+    json.NewEncoder(w).Encode(resp)
+    return
+  }
+
+  //Save account
+  accountBytes, err := json.Marshal(j)
+  if err != nil {
+    panic(err)
+  }
+  ds.Put("mozart/accounts/" + j.Name, accountBytes)
+  resp := Resp{true, ""}
+  json.NewEncoder(w).Encode(resp)
+}
+
+func AccountsListHandler(w http.ResponseWriter, r *http.Request) {
+  w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+  w.WriteHeader(http.StatusOK)
+  defer r.Body.Close()
+
+  accounts := make(map[string]Account)
+
+  //Get accounts
+  dataBytes, _ := ds.GetByPrefix("mozart/accounts")
+  for k, v := range dataBytes {
+    var data Account
+    err := json.Unmarshal(v, &data)
+    if err != nil {
+      panic(err)
+    }
+    data.AccessKey = ""
+    data.SecretKey = ""
+    data.Password = ""
+    accounts[k] = data
+  }
+
+  resp := AccountsListResp{accounts, true, ""}
+  json.NewEncoder(w).Encode(resp)
+}
 /*
 func ContainersListWorkersHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "application/json; charset=UTF-8")
@@ -358,9 +463,19 @@ func NodeListHandler(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(resp)
 }
 */
-func startJoinServer(serverIp string, joinPort string, caCert string, serverCert string, serverKey string){
+func startAccountAndJoinServer(serverIp string, joinPort string, caCert string, serverCert string, serverKey string){
   router := mux.NewRouter().StrictSlash(true)
-	router.HandleFunc("/", NodeInitialJoinHandler)
+
+	router.HandleFunc("/nodes/initialjoin", NodeInitialJoinHandler)
+
+  router.HandleFunc("/containers/create", ContainersCreateHandler)
+  router.HandleFunc("/containers/stop/{container}", ContainersStopHandler)
+  router.HandleFunc("/containers/list", ContainersListHandler)
+
+  router.HandleFunc("/accounts/create", CheckAccountAuth(AccountsCreateHandler))
+  router.HandleFunc("/accounts/remove", RootHandler)
+  router.HandleFunc("/accounts/list", CheckAccountAuth(AccountsListHandler))
+
   handler := cors.Default().Handler(router)
 
   //Setup server config
@@ -393,6 +508,10 @@ func startApiServer(serverIp string, serverPort string, caCert string, serverCer
   router.HandleFunc("/service/create", RootHandler)
   router.HandleFunc("/service/list", RootHandler)
   router.HandleFunc("/service/inspect", RootHandler)
+
+  router.HandleFunc("/accounts/create", AccountsCreateHandler)
+  router.HandleFunc("/accounts/remove", RootHandler)
+  router.HandleFunc("/accounts/list", AccountsListHandler)
 
   handler := cors.Default().Handler(router)
 
