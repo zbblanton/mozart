@@ -249,6 +249,16 @@ func clusterList(c *cli.Context) {
 	fmt.Println("Feature not yet implemented.")
 }
 
+func clusterCaPrint(c *cli.Context) {
+	config := readConfigFile("/etc/mozart/config.json")
+	//Load CA
+  rootCa, err := ioutil.ReadFile(defaultSSLPath + config.Name + "-ca.crt")
+  if err != nil {
+    panic(err)
+  }
+	fmt.Println(string(rootCa))
+}
+
 func serviceCreate(c *cli.Context) {
 	fmt.Println("Feature not yet implemented.")
 }
@@ -491,6 +501,11 @@ func main() {
 					Name:  "ls",
 					Usage: "List all clusters this client can connect to.",
 					Action: clusterList,
+				},
+				{
+					Name:  "ca",
+					Usage: "Print the CA cert.",
+					Action: clusterCaPrint,
 				},
 			},
 		},
