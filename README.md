@@ -1,7 +1,15 @@
 # Mozart
 
 ## Description
-Container Orchestration Tool
+Container Orchestration Tool written in Golang. Similar to tools such as Kubernetes and Docker Swarm.
+
+## Features
+* Orchestrate containers across multiple nodes.
+* Automatically move containers around to other workers if a worker dies.
+* Automatically bring containers back up if they die.
+* Easy one line agent setup to quickly deploy workers.
+* Fully automated TLS communication between the master and the agents.
+* Create services accounts that can used to access the API allowing for extensions/plugins.
 
 ## Getting Started
 The fastest way to get started is to install all three of Mozart's components to the same host. To do this simply run the commands below:
