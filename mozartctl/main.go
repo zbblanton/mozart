@@ -280,6 +280,7 @@ func accountsCreate(c *cli.Context) {
 		return
 	}
 
+	/*
 	//Generate Access Key
 	randKey := make([]byte, 16)
   _, err := rand.Read(randKey)
@@ -297,12 +298,11 @@ func accountsCreate(c *cli.Context) {
 		os.Exit(1)
 	}
 	secretKey := base64.URLEncoding.EncodeToString(randKey)
+	*/
 
 	newAccount := Account{
-    Type: "Service",
-    Name: accountName,
-		AccessKey: accessKey,
-		SecretKey: secretKey}
+    Type: "service",
+    Name: accountName}
 
 	b := new(bytes.Buffer)
   json.NewEncoder(b).Encode(newAccount)
@@ -312,7 +312,13 @@ func accountsCreate(c *cli.Context) {
 		panic(err)
 	}
 
-	respBody := Resp{}
+	type AccountCreateResp struct {
+    Account Account
+    Success bool `json:"success"`
+    Error string `json:"error"`
+  }
+
+	respBody := AccountCreateResp{}
   err = json.Unmarshal(resp, &respBody)
 	if err != nil {
 		panic(err)
@@ -321,9 +327,9 @@ func accountsCreate(c *cli.Context) {
 	if(!respBody.Success){
 		fmt.Println(respBody.Error)
 	}
-	fmt.Println("Created account for", accountName)
-	fmt.Println("Access Key:", accessKey)
-	fmt.Println("Secret Key:", secretKey)
+	fmt.Println("Created account for", respBody.Account.Name)
+	fmt.Println("Access Key:", respBody.Account.AccessKey)
+	fmt.Println("Secret Key:", respBody.Account.SecretKey)
 	fmt.Println("")
 	fmt.Println("Please save these keys! This is the only time you will see them.")
 }
@@ -440,10 +446,10 @@ func containerList(c *cli.Context) {
 	table.Render() // Send output
 }
 
-func nodesList(c *cli.Context) {
+func workersList(c *cli.Context) {
     config := readConfigFile("/etc/mozart/config.json")
 
-	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/nodes/list"
+	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/workers/list"
 	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "GET", url, nil)
 	if err != nil {
 		panic(err)
@@ -510,13 +516,13 @@ func main() {
 			},
 		},
 		{
-			Name:        "nodes",
+			Name:        "workers",
 			Usage:       "Helper commands for nodes.",
 			Subcommands: []cli.Command{
 				{
 					Name:  "ls",
-					Usage: "List all nodes in a cluster.",
-					Action: nodesList,
+					Usage: "List all workers in a cluster.",
+					Action: workersList,
 				},
 			},
 		},
