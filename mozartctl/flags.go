@@ -6,22 +6,22 @@ import (
 
 var (
 	flagClusterName = cli.StringFlag{
-		Name:   "name",
-		Usage:  "Name of the cluster",
+		Name:  "name",
+		Usage: "Name of the cluster",
 	}
 
-  flagClusterServer = cli.StringFlag{
-		Name:   "server",
-		Usage:  "Address of the Mozart server.",
+	flagClusterServer = cli.StringFlag{
+		Name:  "server",
+		Usage: "Address of the Mozart server.",
 	}
 
 	flagRunConfig = cli.StringFlag{
-		Name:   "config",
-		Usage:  "Container config file.",
+		Name:  "config",
+		Usage: "Container config file.",
 	}
 
 	flagAccountName = cli.StringFlag{
-		Name:   "account",
-		Usage:  "Account name.",
+		Name:  "account",
+		Usage: "Account name.",
 	}
 )

@@ -1,171 +1,171 @@
 package main
 
 import (
-	"log"
-	"os"
-	"fmt"
-	"crypto/tls"
-	"crypto/x509"
+	"bufio"
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"github.com/olekukonko/tablewriter"
+	"gopkg.in/urfave/cli.v1"
 	"io"
 	"io/ioutil"
-	"net/http"
-	"encoding/json"
-	"encoding/base64"
-	"gopkg.in/urfave/cli.v1"
-	"bufio"
-	"github.com/olekukonko/tablewriter"
+	"log"
 	"net"
-	"bytes"
+	"net/http"
+	"os"
 )
 
 //Config - Server and control config
 type Config struct {
-  Name string
-  ServerIP string
-  ServerPort string
-  AgentPort string
-  AgentJoinKey string
-  CaCert string
-  CaKey string
-  ServerCert string
-  ServerKey string
+	Name         string
+	ServerIP     string
+	ServerPort   string
+	AgentPort    string
+	AgentJoinKey string
+	CaCert       string
+	CaKey        string
+	ServerCert   string
+	ServerKey    string
 }
 
 //Container - Container struct
 type Container struct {
-	Name string
-	State string
+	Name         string
+	State        string
 	DesiredState string
-	Worker string
+	Worker       string
 }
 
 //ContainerListResp - Response for container list
 type ContainerListResp struct {
 	Containers map[string]Container
-	Success bool
-	Error string
+	Success    bool
+	Error      string
 }
 
 //Worker - Worker struct
 type Worker struct {
-  AgentIP string
-  AgentPort string
-  Status string
+	AgentIP   string
+	AgentPort string
+	Status    string
 }
 
 //WorkerListResp - Response for the worker list
 type WorkerListResp struct {
 	Workers map[string]Worker
 	Success bool
-	Error string
+	Error   string
 }
 
 //Account - Account struct
 type Account struct {
-  Type string
-  Name string
-  Password string
-  AccessKey string
-  SecretKey string
-  Description string
+	Type        string
+	Name        string
+	Password    string
+	AccessKey   string
+	SecretKey   string
+	Description string
 }
 
 //AccountsListResp - Response for accounts list
 type AccountsListResp struct {
-  Accounts map[string]Account
-  Success bool `json:"success"`
-  Error string `json:"error"`
+	Accounts map[string]Account
+	Success  bool   `json:"success"`
+	Error    string `json:"error"`
 }
 
 //Resp - Generic response
 type Resp struct {
-  Success bool `json:"success"`
-  Error string `json:"error"`
+	Success bool   `json:"success"`
+	Error   string `json:"error"`
 }
 
 //taken from a google help pack
 //https://groups.google.com/forum/#!topic/golang-nuts/rmKTsGHPjlA
-func writeFile(file string, config Config){
-  f, err := os.Create(file)
-  if err != nil {
-    panic("cant open file")
-  }
-  defer f.Close()
+func writeFile(file string, config Config) {
+	f, err := os.Create(file)
+	if err != nil {
+		panic("cant open file")
+	}
+	defer f.Close()
 
-  enc := json.NewEncoder(f)
+	enc := json.NewEncoder(f)
 	enc.SetIndent("", "    ")
-  err = enc.Encode(config)
-  if err != nil {
-    panic("cant encode")
-  }
+	err = enc.Encode(config)
+	if err != nil {
+		panic("cant encode")
+	}
 }
 
-func readConfigFile(file string) Config{
-  config := Config{}
-  f, err := os.Open(file)
-  if err != nil {
-    panic("cant open file")
-  }
-  defer f.Close()
+func readConfigFile(file string) Config {
+	config := Config{}
+	f, err := os.Open(file)
+	if err != nil {
+		panic("cant open file")
+	}
+	defer f.Close()
 
-  enc := json.NewDecoder(f)
-  err = enc.Decode(&config)
-  if err != nil {
-    panic("cant decode")
-  }
+	enc := json.NewDecoder(f)
+	err = enc.Decode(&config)
+	if err != nil {
+		panic("cant decode")
+	}
 
-  return config
+	return config
 }
 
-func callSecuredServer(pubKey, privKey, ca string, method string, url string, body io.Reader) (respBody []byte, err error)  {
-  //Load our key pair
-  clientKeyPair, err := tls.LoadX509KeyPair(pubKey, privKey)
-  if err != nil {
-    panic(err)
-  }
+func callSecuredServer(pubKey, privKey, ca string, method string, url string, body io.Reader) (respBody []byte, err error) {
+	//Load our key pair
+	clientKeyPair, err := tls.LoadX509KeyPair(pubKey, privKey)
+	if err != nil {
+		panic(err)
+	}
 
 	//Load CA
-  rootCa, err := ioutil.ReadFile(ca)
-  if err != nil {
-    panic(err)
-  }
+	rootCa, err := ioutil.ReadFile(ca)
+	if err != nil {
+		panic(err)
+	}
 
-  //Create a new cert pool
-  rootCAs := x509.NewCertPool()
+	//Create a new cert pool
+	rootCAs := x509.NewCertPool()
 
-  // Append our ca cert to the system pool
-  if ok := rootCAs.AppendCertsFromPEM(rootCa); !ok {
-    log.Println("No certs appended, using system certs only")
-  }
+	// Append our ca cert to the system pool
+	if ok := rootCAs.AppendCertsFromPEM(rootCa); !ok {
+		log.Println("No certs appended, using system certs only")
+	}
 
-  // Trust cert pool in our client
-  clientConfig := &tls.Config{
-    InsecureSkipVerify: false,
-    RootCAs:            rootCAs,
-    Certificates: 			[]tls.Certificate{clientKeyPair},
-  }
-  clientTr := &http.Transport{TLSClientConfig: clientConfig}
-  secureClient := &http.Client{Transport: clientTr}
+	// Trust cert pool in our client
+	clientConfig := &tls.Config{
+		InsecureSkipVerify: false,
+		RootCAs:            rootCAs,
+		Certificates:       []tls.Certificate{clientKeyPair},
+	}
+	clientTr := &http.Transport{TLSClientConfig: clientConfig}
+	secureClient := &http.Client{Transport: clientTr}
 
-  // Still works with host-trusted CAs!
-  req, err := http.NewRequest(http.MethodPost, url, body)
-  if err != nil {
-    panic(err)
-  }
-  resp, err := secureClient.Do(req)
-  if err != nil {
-    panic(err)
-  }
-  reader := bufio.NewReader(resp.Body)
-  respBody, _ = ioutil.ReadAll(reader)
-  resp.Body.Close()
+	// Still works with host-trusted CAs!
+	req, err := http.NewRequest(http.MethodPost, url, body)
+	if err != nil {
+		panic(err)
+	}
+	resp, err := secureClient.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	reader := bufio.NewReader(resp.Body)
+	respBody, _ = ioutil.ReadAll(reader)
+	resp.Body.Close()
 
-  return respBody, nil
+	return respBody, nil
 }
 
-func generateSha256(file string) string{
+func generateSha256(file string) string {
 	f, err := os.Open(file)
 	if err != nil {
 		log.Fatal(err)
@@ -187,47 +187,47 @@ func clusterSwitch(c *cli.Context) {
 func clusterCreate(c *cli.Context) {
 	name := c.String("name")
 	server := c.String("server")
-	if(name == ""){
+	if name == "" {
 		log.Fatal("Please provide a name for the server.")
 	}
 
-	if(server == ""){
+	if server == "" {
 		log.Fatal("Please provide the Mozart server address.")
 	}
 
-	if(net.ParseIP(server) == nil){
+	if net.ParseIP(server) == nil {
 		log.Fatal("Invalid IP address!")
 	}
 
 	fmt.Println("Creating Mozart CA...")
-  generateCaKeyPair(name + "-ca")
-  fmt.Println("Creating server keypair...")
-	generateSignedKeyPair(name + "-ca.crt", name + "-ca.key", name + "-server", server)
-  fmt.Println("Creating client keypair...")
-	generateSignedKeyPair(name + "-ca.crt", name + "-ca.key", name + "-client", server)
+	generateCaKeyPair(name + "-ca")
+	fmt.Println("Creating server keypair...")
+	generateSignedKeyPair(name+"-ca.crt", name+"-ca.key", name+"-server", server)
+	fmt.Println("Creating client keypair...")
+	generateSignedKeyPair(name+"-ca.crt", name+"-ca.key", name+"-client", server)
 
 	//Generate worker join key
 	randKey := make([]byte, 128)
-  _, err := rand.Read(randKey)
-  if err != nil {
-    fmt.Println("Error generating a new worker key, we are going to exit here due to possible system errors.")
-    os.Exit(1)
-  }
-  joinKey := base64.URLEncoding.EncodeToString(randKey)
+	_, err := rand.Read(randKey)
+	if err != nil {
+		fmt.Println("Error generating a new worker key, we are going to exit here due to possible system errors.")
+		os.Exit(1)
+	}
+	joinKey := base64.URLEncoding.EncodeToString(randKey)
 
 	//Create config file
 	config := Config{
-	  Name: name,
-	  ServerIP: server,
-	  ServerPort: "47433",
-	  AgentPort: "49433",
-	  AgentJoinKey: joinKey,
-	  CaCert: defaultSSLPath + name + "-ca.crt",
-	  CaKey: defaultSSLPath + name + "-ca.key",
-	  ServerCert: defaultSSLPath + name + "-server.crt",
-	  ServerKey: defaultSSLPath + name + "-server.key",
+		Name:         name,
+		ServerIP:     server,
+		ServerPort:   "47433",
+		AgentPort:    "49433",
+		AgentJoinKey: joinKey,
+		CaCert:       defaultSSLPath + name + "-ca.crt",
+		CaKey:        defaultSSLPath + name + "-ca.key",
+		ServerCert:   defaultSSLPath + name + "-server.crt",
+		ServerKey:    defaultSSLPath + name + "-server.key",
 	}
-	writeFile(defaultConfigPath + name + "-config.json", config)
+	writeFile(defaultConfigPath+name+"-config.json", config)
 
 	//Generate hash
 	caHash := generateSha256(defaultSSLPath + name + "-ca.crt")
@@ -240,7 +240,7 @@ func clusterCreate(c *cli.Context) {
 }
 
 func clusterPrint(c *cli.Context) {
-    config := readConfigFile("/etc/mozart/config.json")
+	config := readConfigFile("/etc/mozart/config.json")
 
 	//Generate hash
 	caHash := generateSha256(config.CaCert)
@@ -259,10 +259,10 @@ func clusterList(c *cli.Context) {
 func clusterCaPrint(c *cli.Context) {
 	config := readConfigFile("/etc/mozart/config.json")
 	//Load CA
-  rootCa, err := ioutil.ReadFile(defaultSSLPath + config.Name + "-ca.crt")
-  if err != nil {
-    panic(err)
-  }
+	rootCa, err := ioutil.ReadFile(defaultSSLPath + config.Name + "-ca.crt")
+	if err != nil {
+		panic(err)
+	}
 	fmt.Println(string(rootCa))
 }
 
@@ -282,56 +282,56 @@ func accountsCreate(c *cli.Context) {
 	config := readConfigFile("/etc/mozart/config.json")
 
 	accountName := c.Args().First()
-	if(accountName == ""){
+	if accountName == "" {
 		fmt.Println("Must provide an account name.")
 		return
 	}
 
 	/*
-	//Generate Access Key
-	randKey := make([]byte, 16)
-  _, err := rand.Read(randKey)
-  if err != nil {
-    fmt.Println("Error generating a key, we are going to exit here due to possible system errors.")
-    os.Exit(1)
-  }
-  accessKey := base64.URLEncoding.EncodeToString(randKey)
+			//Generate Access Key
+			randKey := make([]byte, 16)
+		  _, err := rand.Read(randKey)
+		  if err != nil {
+		    fmt.Println("Error generating a key, we are going to exit here due to possible system errors.")
+		    os.Exit(1)
+		  }
+		  accessKey := base64.URLEncoding.EncodeToString(randKey)
 
-	//Generate Secret Key
-	randKey = make([]byte, 64)
-	_, err = rand.Read(randKey)
-	if err != nil {
-		fmt.Println("Error generating a key, we are going to exit here due to possible system errors.")
-		os.Exit(1)
-	}
-	secretKey := base64.URLEncoding.EncodeToString(randKey)
+			//Generate Secret Key
+			randKey = make([]byte, 64)
+			_, err = rand.Read(randKey)
+			if err != nil {
+				fmt.Println("Error generating a key, we are going to exit here due to possible system errors.")
+				os.Exit(1)
+			}
+			secretKey := base64.URLEncoding.EncodeToString(randKey)
 	*/
 
 	newAccount := Account{
-    Type: "service",
-    Name: accountName}
+		Type: "service",
+		Name: accountName}
 
 	b := new(bytes.Buffer)
-  json.NewEncoder(b).Encode(newAccount)
+	json.NewEncoder(b).Encode(newAccount)
 	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/accounts/create"
-	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "POST", url, b)
-  if err != nil {
+	resp, err := callSecuredServer(defaultSSLPath+config.Name+"-client.crt", defaultSSLPath+config.Name+"-client.key", defaultSSLPath+config.Name+"-ca.crt", "POST", url, b)
+	if err != nil {
 		panic(err)
 	}
 
 	type AccountCreateResp struct {
-    Account Account
-    Success bool `json:"success"`
-    Error string `json:"error"`
-  }
+		Account Account
+		Success bool   `json:"success"`
+		Error   string `json:"error"`
+	}
 
 	respBody := AccountCreateResp{}
-  err = json.Unmarshal(resp, &respBody)
+	err = json.Unmarshal(resp, &respBody)
 	if err != nil {
 		panic(err)
 	}
 
-	if(!respBody.Success){
+	if !respBody.Success {
 		fmt.Println(respBody.Error)
 	}
 	fmt.Println("Created account for", respBody.Account.Name)
@@ -342,10 +342,10 @@ func accountsCreate(c *cli.Context) {
 }
 
 func accountsList(c *cli.Context) {
-  config := readConfigFile("/etc/mozart/config.json")
+	config := readConfigFile("/etc/mozart/config.json")
 
 	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/accounts/list"
-	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "GET", url, nil)
+	resp, err := callSecuredServer(defaultSSLPath+config.Name+"-client.crt", defaultSSLPath+config.Name+"-client.key", defaultSSLPath+config.Name+"-ca.crt", "GET", url, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -356,24 +356,24 @@ func accountsList(c *cli.Context) {
 		panic(err)
 	}
 
-	if(!respBody.Success){
+	if !respBody.Success {
 		panic(respBody.Error)
 	}
 
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Type", "Name", "Description"})
 	for _, c := range respBody.Accounts {
-	   table.Append([]string{c.Type, c.Name, c.Description})
+		table.Append([]string{c.Type, c.Name, c.Description})
 	}
 	table.Render() // Send output
 }
 
 func containerRun(c *cli.Context) {
-  config := readConfigFile("/etc/mozart/config.json")
+	config := readConfigFile("/etc/mozart/config.json")
 
 	//configPath := c.String("config")
 	configPath := c.Args().First()
-	if(configPath == ""){
+	if configPath == "" {
 		configPath = "config.json"
 	}
 
@@ -386,51 +386,51 @@ func containerRun(c *cli.Context) {
 	configReader := bufio.NewReader(f)
 
 	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/containers/create"
-	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "POST", url, configReader)
-  if err != nil {
-		panic(err)
-	}
-
-	respBody := Resp{}
-  err = json.Unmarshal(resp, &respBody)
+	resp, err := callSecuredServer(defaultSSLPath+config.Name+"-client.crt", defaultSSLPath+config.Name+"-client.key", defaultSSLPath+config.Name+"-ca.crt", "POST", url, configReader)
 	if err != nil {
 		panic(err)
 	}
 
-	if(!respBody.Success){
+	respBody := Resp{}
+	err = json.Unmarshal(resp, &respBody)
+	if err != nil {
+		panic(err)
+	}
+
+	if !respBody.Success {
 		panic(respBody.Error)
 	}
 }
 
 func containerStop(c *cli.Context) {
-    config := readConfigFile("/etc/mozart/config.json")
+	config := readConfigFile("/etc/mozart/config.json")
 
-	if(c.Args().First() == ""){
+	if c.Args().First() == "" {
 		panic("Must provide the name or id of the container.")
 	}
 
 	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/containers/stop/" + c.Args().First()
-	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "GET", url, nil)
-  if err != nil {
-		panic(err)
-	}
-
-	respBody := Resp{}
-  err = json.Unmarshal(resp, &respBody)
+	resp, err := callSecuredServer(defaultSSLPath+config.Name+"-client.crt", defaultSSLPath+config.Name+"-client.key", defaultSSLPath+config.Name+"-ca.crt", "GET", url, nil)
 	if err != nil {
 		panic(err)
 	}
 
-	if(!respBody.Success){
+	respBody := Resp{}
+	err = json.Unmarshal(resp, &respBody)
+	if err != nil {
+		panic(err)
+	}
+
+	if !respBody.Success {
 		fmt.Println(respBody.Error)
 	}
 }
 
 func containerList(c *cli.Context) {
-    config := readConfigFile("/etc/mozart/config.json")
+	config := readConfigFile("/etc/mozart/config.json")
 
 	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/containers/list"
-	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "GET", url, nil)
+	resp, err := callSecuredServer(defaultSSLPath+config.Name+"-client.crt", defaultSSLPath+config.Name+"-client.key", defaultSSLPath+config.Name+"-ca.crt", "GET", url, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -441,23 +441,23 @@ func containerList(c *cli.Context) {
 		panic(err)
 	}
 
-	if(!respBody.Success){
+	if !respBody.Success {
 		panic(respBody.Error)
 	}
 
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"Name", "State", "Desired State", "Worker"})
 	for _, c := range respBody.Containers {
-	   table.Append([]string{c.Name, c.State, c.DesiredState, c.Worker})
+		table.Append([]string{c.Name, c.State, c.DesiredState, c.Worker})
 	}
 	table.Render() // Send output
 }
 
 func workersList(c *cli.Context) {
-    config := readConfigFile("/etc/mozart/config.json")
+	config := readConfigFile("/etc/mozart/config.json")
 
 	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/workers/list"
-	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "GET", url, nil)
+	resp, err := callSecuredServer(defaultSSLPath+config.Name+"-client.crt", defaultSSLPath+config.Name+"-client.key", defaultSSLPath+config.Name+"-ca.crt", "GET", url, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -468,14 +468,14 @@ func workersList(c *cli.Context) {
 		panic(err)
 	}
 
-	if(!respBody.Success){
+	if !respBody.Success {
 		panic(respBody.Error)
 	}
 
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"IP", "Port", "Status"})
 	for _, n := range respBody.Workers {
-	   table.Append([]string{n.AgentIP, n.AgentPort, n.Status})
+		table.Append([]string{n.AgentIP, n.AgentPort, n.Status})
 	}
 	table.Render() // Send output
 }
@@ -491,77 +491,77 @@ func main() {
 	app.Version = "0.1.0"
 	app.Commands = []cli.Command{
 		{
-			Name:        "cluster",
-			Usage:       "Helper commands for clusters.",
+			Name:  "cluster",
+			Usage: "Helper commands for clusters.",
 			Subcommands: []cli.Command{
 				{
-					Name:  "switch",
-					Usage: "switch to another cluster",
+					Name:   "switch",
+					Usage:  "switch to another cluster",
 					Action: clusterSwitch,
 				},
 				{
-					Name:  "create",
-					Usage: "Generate a new cluster config and files.",
-					Flags: []cli.Flag{flagClusterName, flagClusterServer},
+					Name:   "create",
+					Usage:  "Generate a new cluster config and files.",
+					Flags:  []cli.Flag{flagClusterName, flagClusterServer},
 					Action: clusterCreate,
 				},
 				{
-					Name:  "print",
-					Usage: "Print the install instructions.",
+					Name:   "print",
+					Usage:  "Print the install instructions.",
 					Action: clusterPrint,
 				},
 				{
-					Name:  "ls",
-					Usage: "List all clusters this client can connect to.",
+					Name:   "ls",
+					Usage:  "List all clusters this client can connect to.",
 					Action: clusterList,
 				},
 				{
-					Name:  "ca",
-					Usage: "Print the CA cert.",
+					Name:   "ca",
+					Usage:  "Print the CA cert.",
 					Action: clusterCaPrint,
 				},
 			},
 		},
 		{
-			Name:        "workers",
-			Usage:       "Helper commands for nodes.",
+			Name:  "workers",
+			Usage: "Helper commands for nodes.",
 			Subcommands: []cli.Command{
 				{
-					Name:  "ls",
-					Usage: "List all workers in a cluster.",
+					Name:   "ls",
+					Usage:  "List all workers in a cluster.",
 					Action: workersList,
 				},
 			},
 		},
 		{
-			Name:        "accounts",
-			Usage:       "Helper commands for accounts.",
+			Name:  "accounts",
+			Usage: "Helper commands for accounts.",
 			Subcommands: []cli.Command{
 				{
-					Name:  "create",
-					Usage: "Create an account in a cluster.",
+					Name:   "create",
+					Usage:  "Create an account in a cluster.",
 					Action: accountsCreate,
 				},
 				{
-					Name:  "ls",
-					Usage: "List all the accounts in a cluster.",
+					Name:   "ls",
+					Usage:  "List all the accounts in a cluster.",
 					Action: accountsList,
 				},
 			},
 		},
 		{
-			Name:  "run",
-			Usage: "Schedules a container to be created and started.",
+			Name:   "run",
+			Usage:  "Schedules a container to be created and started.",
 			Action: containerRun,
 		},
 		{
-			Name:  "stop",
-			Usage: "Schedules a container to be stopped.",
+			Name:   "stop",
+			Usage:  "Schedules a container to be stopped.",
 			Action: containerStop,
 		},
 		{
-			Name:  "ls",
-			Usage: "List all containers in a cluster.",
+			Name:   "ls",
+			Usage:  "List all containers in a cluster.",
 			Action: containerList,
 		},
 	}
