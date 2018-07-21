@@ -1,7 +1,6 @@
 package main
 
 import(
-  "os"
   "fmt"
   "time"
 )
@@ -20,7 +19,7 @@ func MonitorContainers(serverIP, agentIP string) {
       }
 
       if(container.State != state || container.DesiredState != state){
-        if container.State != "starting" || container.State != "stopping" {
+        if container.State != "starting" && container.State != "stopping" {
           //containerControllerUpdateState(container.Name, state, serverIp)
           switch container.DesiredState {
             case "running":
@@ -38,5 +37,5 @@ func MonitorContainers(serverIP, agentIP string) {
     //time.Sleep(time.Duration(5) * time.Second)
     <- ticker.C
   }
-  os.Exit(1) //In case the for loop exits, stop the whole program.
+  //os.Exit(1) //In case the for loop exits, stop the whole program.//This is unreachable
 }

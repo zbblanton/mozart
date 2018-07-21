@@ -155,8 +155,8 @@ func containerControllerExecutor(msg ControllerMsg) bool{
       return true
     default:
       panic("Not action available for Container Controller.")
-      return false
+      //return false //This is unreachable until we fix the panic above.
   }
 
-  return true
+  //return true //This is unreachable
 }

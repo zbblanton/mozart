@@ -52,10 +52,10 @@ func containerControllerExecutor(msg interface{}) bool{
       return containerControllerStop(msg)
     default:
       panic("Not action available for Container Controller.")
-      return false
+      //return false //This is unreachable until we fix the panic above.
   }
 
-  return true
+  //return true //This is unreachable
 }
 
 func containerControllerStart(c ContainerConfig) bool {
@@ -341,8 +341,8 @@ func workerControllerExecutor(msg ControllerMsg) bool{
       return false
     default:
       panic("Not action available for Worker Controller.")
-      return false
+      //return false //This is unreachable until we fix the panic above.
   }
 
-  return true
+  //return true //This is unreachable
 }

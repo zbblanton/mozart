@@ -1,7 +1,6 @@
 package main
 
 import(
-  "os"
   "fmt"
   "time"
   "encoding/json"
@@ -55,5 +54,5 @@ func monitorWorkers() {
     fmt.Println("Waiting 10 seconds!")
     time.Sleep(time.Duration(10) * time.Second)
   }
-  os.Exit(1) //In case the for loop exits, stop the whole program.
+  //os.Exit(1) //In case the for loop exits, stop the whole program. This is unreachable
 }
