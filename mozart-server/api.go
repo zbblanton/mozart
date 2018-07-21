@@ -47,11 +47,18 @@ func NodeInitialJoinHandler(w http.ResponseWriter, r *http.Request) {
   //Decode the CSR from base64
   csr, err := base64.URLEncoding.DecodeString(j.Csr)
   if err != nil {
-      panic(err)
+    resp := NodeJoinResp{ServerKey: "", Success: false, Error: "Error during initial join."}
+    json.NewEncoder(w).Encode(resp)
+    return
   }
 
   //Sign the CSR
   signedCert, err := signCSR(config.CaCert, config.CaKey, csr, j.AgentIP)
+  if err != nil {
+    resp := NodeJoinResp{ServerKey: "", Success: false, Error: "Error during initial join."}
+    json.NewEncoder(w).Encode(resp)
+    return
+  }
 
   //Prepare signed cert to be sent to agent
   signedCertString := base64.URLEncoding.EncodeToString(signedCert)
@@ -59,7 +66,9 @@ func NodeInitialJoinHandler(w http.ResponseWriter, r *http.Request) {
   //Prepare CA to be sent to agent
   ca, err := ioutil.ReadFile(config.CaCert)
   if err != nil {
-    panic("cant open file")
+    resp := NodeJoinResp{ServerKey: "", Success: false, Error: "Error during initial join."}
+    json.NewEncoder(w).Encode(resp)
+    return
   }
   caString := base64.URLEncoding.EncodeToString(ca)
 
@@ -357,6 +366,11 @@ func CheckAccountAuth(handler http.HandlerFunc) http.HandlerFunc {
     accountBytes, err := ds.Get("mozart/accounts/" + headerAccount)
     if accountBytes == nil {
       resp := Resp{false, "Invalid Auth. Not accounts found. (This warning is temp)"}
+      json.NewEncoder(w).Encode(resp)
+      return
+    }
+    if err != nil {
+      resp := Resp{false, "Error trying to auth."}
       json.NewEncoder(w).Encode(resp)
       return
     }

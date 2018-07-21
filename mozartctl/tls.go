@@ -55,12 +55,21 @@ func generateSignedKeyPair(caCert string, caKey string, keyPairName string, ip s
     pub := &priv.PublicKey
     // Sign the certificate
     certB, err := x509.CreateCertificate(rand.Reader, cert, ca, pub, catls.PrivateKey)
+		if err != nil {
+	  	panic(err)
+	  }
     // Public key
     certOut, err := os.Create(defaultSSLPath + keyPairName + ".crt")
+		if err != nil {
+	  	panic(err)
+	  }
     pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: certB})
     certOut.Close()
     // Private key
     keyOut, err := os.OpenFile(defaultSSLPath + keyPairName + ".key", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+		if err != nil {
+	  	panic(err)
+	  }
     pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
     keyOut.Close()
 }
@@ -87,11 +96,17 @@ func generateCaKeyPair(caPairName string) {
     }
     // Public key
     certOut, err := os.Create(defaultSSLPath + caPairName + ".crt")
+		if err != nil {
+	  	panic(err)
+	  }
     pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: caB})
     certOut.Close()
     log.Print("written cert.pem\n")
     // Private key
     keyOut, err := os.OpenFile(defaultSSLPath + caPairName + ".key", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+		if err != nil {
+	  	panic(err)
+	  }
     pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
     keyOut.Close()
     log.Print("written key.pem\n")

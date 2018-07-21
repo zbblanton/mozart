@@ -20,7 +20,6 @@ import(
   "net"
   "encoding/pem"
   "io/ioutil"
-  "errors"
 )
 
 //Container holds data for one container
@@ -380,7 +379,8 @@ func main() {
   }
 
   //Load Certs into memory
-  err := errors.New("")
+  //err := errors.New("")
+  var err error
   serverTLSCert, err = ioutil.ReadFile(config.ServerCert)
   if err != nil {
     panic(err)

