@@ -1,4 +1,5 @@
 # Mozart
+[![Go Report Card](https://goreportcard.com/badge/github.com/zbblanton/mozart)](https://goreportcard.com/report/github.com/zbblanton/mozart)
 
 ## Description
 Container Orchestration Tool written in Golang. Similar to tools such as Kubernetes and Docker Swarm.
