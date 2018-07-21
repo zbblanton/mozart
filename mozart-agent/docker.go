@@ -1,6 +1,7 @@
 package main
 
 import(
+  "net"
   "io"
   "io/ioutil"
   "bufio"
@@ -8,13 +9,12 @@ import(
 	"encoding/json"
 	"net/http"
   "fmt"
-  //"net/url"
-
   "github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"golang.org/x/net/context"
 )
 
+//ConvertContainerConfigToDockerContainerConfig - Converts a config to a docker compatible config
 func ConvertContainerConfigToDockerContainerConfig(c ContainerConfig) DockerContainerConfig {
   d := DockerContainerConfig{}
   d.Image = c.Image
@@ -28,7 +28,7 @@ func ConvertContainerConfigToDockerContainerConfig(c ContainerConfig) DockerCont
   d.HostConfig.PortBindings = make(map[string][]DockerContainerHostConfigPortBindings)
   for _, port := range c.ExposedPorts {
     p := DockerContainerHostConfigPortBindings{}
-    p.HostIp = port.HostIp
+    p.HostIP = port.HostIP
     p.HostPort = port.HostPort
     d.HostConfig.PortBindings[port.ContainerPort + "/tcp"] = []DockerContainerHostConfigPortBindings{p}
   }
@@ -39,7 +39,12 @@ func ConvertContainerConfigToDockerContainerConfig(c ContainerConfig) DockerCont
   return d
 }
 
-func DockerCallRuntimeApi(method string, url string, body io.Reader) (respBody []byte, err error)  {
+func fakeDial(proto, addr string) (conn net.Conn, err error) {
+  return net.Dial("unix", "/var/run/docker.sock")
+}
+
+//DockerCallRuntimeAPI - Calls the Docker Runtime API
+func DockerCallRuntimeAPI(method string, url string, body io.Reader) (respBody []byte, err error)  {
   tr := &http.Transport{
     Dial: fakeDial,
   }
@@ -62,6 +67,7 @@ func DockerCallRuntimeApi(method string, url string, body io.Reader) (respBody [
   return respBody, nil
 }
 
+//DockerCreateContainer - Creates a docker container
 func DockerCreateContainer(ContainerName string, Container DockerContainerConfig) (id string, err error){
   buff := new(bytes.Buffer)
   json.NewEncoder(buff).Encode(Container)
@@ -70,10 +76,10 @@ func DockerCreateContainer(ContainerName string, Container DockerContainerConfig
     url = url + "?name=" + ContainerName
   }
 
-  body, _ := DockerCallRuntimeApi("POST", url, buff)
+  body, _ := DockerCallRuntimeAPI("POST", url, buff)
 
   type ContainerCreateResp struct {
-    Id string
+    ID string
     Warnings string
     Message string
   }
@@ -85,23 +91,24 @@ func DockerCreateContainer(ContainerName string, Container DockerContainerConfig
 
   //ADD VERIFICATION HERE!!!!!!!!!!!!!
 
-  return j.Id, nil
+  return j.ID, nil
 }
 
+//DockerList - List all the mozart tagged containers
 func DockerList() (containerList []string, err error) {
   url := "http://d/containers/" + "json?filters=%7B%22label%22%3A%5B%22mozart%22%5D%7D"
   //url := "http://d/containers/" + "json"
-  body, err := DockerCallRuntimeApi("GET", url, nil)
+  body, err := DockerCallRuntimeAPI("GET", url, nil)
   if err != nil {
     fmt.Println("Error trying to get docker list:", err)
   }
   /*type DockerListResp struct {
     List []struct {
-      Id string
+      ID string
     }
   }*/
   type DockerListItem struct {
-    Id string
+    ID string
   }
   j := []DockerListItem{}
   b := bytes.NewReader(body)
@@ -111,30 +118,32 @@ func DockerList() (containerList []string, err error) {
 
   for _, container := range j {
     //fmt.Println("Container:", container)
-    containerList = append(containerList, container.Id)
+    containerList = append(containerList, container.ID)
   }
 
   return containerList, nil
 }
 
-func DockerGetId(ContainerName string) (Id string, err error) {
+//DockerGetID - Get the id of a running docker container
+func DockerGetID(ContainerName string) (ID string, err error) {
   url := "http://d/containers/" + ContainerName + "/json"
-  body, _ := DockerCallRuntimeApi("GET", url, nil)
+  body, _ := DockerCallRuntimeAPI("GET", url, nil)
   type DockerStatusResp struct {
-    Id string
+    ID string
   }
   j := DockerStatusResp{}
   b := bytes.NewReader(body)
 	json.NewDecoder(b).Decode(&j)
   //ADD VERIFICATION HERE!!!!!!!!!!!!!
 
-  return j.Id, nil
+  return j.ID, nil
 }
 
+//DockerPullImage - Pulls a docker image down to the host.
 func DockerPullImage(imageName string) error {
   /*encodedImageName := url.QueryEscape(imageName)
   url := "http://d/images/create?fromImage=" + encodedImageName
-  _, err := DockerCallRuntimeApi("POST", url, bytes.NewBuffer([]byte(`{ }`)))
+  _, err := DockerCallRuntimeAPI("POST", url, bytes.NewBuffer([]byte(`{ }`)))
   //fmt.Println(string(body[:]))
   if err != nil {
     //fmt.Println("Error trying to pull image:", string(body[:]))
@@ -161,9 +170,10 @@ func DockerPullImage(imageName string) error {
   return err
 }
 
-func DockerStartContainer(ContainerId string) error{
-  url := "http://d/containers/" + ContainerId + "/start"
-  body, _ := DockerCallRuntimeApi("POST", url, bytes.NewBuffer([]byte(`{	}`)))
+//DockerStartContainer - Starts a docker container
+func DockerStartContainer(ContainerID string) error{
+  url := "http://d/containers/" + ContainerID + "/start"
+  body, _ := DockerCallRuntimeAPI("POST", url, bytes.NewBuffer([]byte(`{	}`)))
   type ContainerStartResp struct {
     Message string
   }
@@ -176,9 +186,10 @@ func DockerStartContainer(ContainerId string) error{
   return nil
 }
 
-func DockerStopContainer(ContainerId string) error{
-  url := "http://d/containers/" + ContainerId + "/stop"
-  body, _ := DockerCallRuntimeApi("POST", url, bytes.NewBuffer([]byte(`{	}`)))
+//DockerStopContainer - Stops a docker container
+func DockerStopContainer(ContainerID string) error{
+  url := "http://d/containers/" + ContainerID + "/stop"
+  body, _ := DockerCallRuntimeAPI("POST", url, bytes.NewBuffer([]byte(`{	}`)))
   type ContainerStopResp struct {
     Message string
   }
@@ -191,9 +202,10 @@ func DockerStopContainer(ContainerId string) error{
   return nil
 }
 
+//DockerContainerStatus - Gets the status of a docker container
 func DockerContainerStatus(ContainerName string) (status string, err error) {
   url := "http://d/containers/" + ContainerName + "/json"
-  body, _ := DockerCallRuntimeApi("GET", url, nil)
+  body, _ := DockerCallRuntimeAPI("GET", url, nil)
   type DockerStatusResp struct {
     State struct {
       Status string

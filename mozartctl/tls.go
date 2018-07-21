@@ -54,10 +54,10 @@ func generateSignedKeyPair(caCert string, caKey string, keyPairName string, ip s
     priv, _ := rsa.GenerateKey(rand.Reader, 2048)
     pub := &priv.PublicKey
     // Sign the certificate
-    cert_b, err := x509.CreateCertificate(rand.Reader, cert, ca, pub, catls.PrivateKey)
+    certB, err := x509.CreateCertificate(rand.Reader, cert, ca, pub, catls.PrivateKey)
     // Public key
     certOut, err := os.Create(defaultSSLPath + keyPairName + ".crt")
-    pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: cert_b})
+    pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: certB})
     certOut.Close()
     // Private key
     keyOut, err := os.OpenFile(defaultSSLPath + keyPairName + ".key", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
@@ -80,14 +80,14 @@ func generateCaKeyPair(caPairName string) {
     }
     priv, _ := rsa.GenerateKey(rand.Reader, 2048)
     pub := &priv.PublicKey
-    ca_b, err := x509.CreateCertificate(rand.Reader, ca, ca, pub, priv)
+    caB, err := x509.CreateCertificate(rand.Reader, ca, ca, pub, priv)
     if err != nil {
         log.Println("create ca failed", err)
         return
     }
     // Public key
     certOut, err := os.Create(defaultSSLPath + caPairName + ".crt")
-    pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: ca_b})
+    pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: caB})
     certOut.Close()
     log.Print("written cert.pem\n")
     // Private key

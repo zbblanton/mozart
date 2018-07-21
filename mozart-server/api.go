@@ -15,12 +15,18 @@ import(
   "io/ioutil"
 )
 
+func containersCreateVerification(c ContainerConfig) bool {
+  return true
+}
+
+//RootHandler - Handles any unrouted requests.
 func RootHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
   w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Hi there :)\n"))
 }
 
+//NodeInitialJoinHandler - Node Initial Join
 func NodeInitialJoinHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "application/json; charset=UTF-8")
   w.WriteHeader(http.StatusOK)
@@ -45,7 +51,7 @@ func NodeInitialJoinHandler(w http.ResponseWriter, r *http.Request) {
   }
 
   //Sign the CSR
-  signedCert, err := signCSR(config.CaCert, config.CaKey, csr, j.AgentIp)
+  signedCert, err := signCSR(config.CaCert, config.CaKey, csr, j.AgentIP)
 
   //Prepare signed cert to be sent to agent
   signedCertString := base64.URLEncoding.EncodeToString(signedCert)
@@ -61,6 +67,7 @@ func NodeInitialJoinHandler(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(resp)
 }
 
+//NodeJoinHandler - Node join handler
 func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "application/json; charset=UTF-8")
   w.WriteHeader(http.StatusOK)
@@ -95,9 +102,9 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
   // }
 
   //Check if worker exist and if it has an active or maintenance status
-  //if worker, ok := workers["mozart/workers/" + j.AgentIp]; ok {
+  //if worker, ok := workers["mozart/workers/" + j.AgentIP]; ok {
   var worker Worker
-  workerBytes, _ := ds.Get("mozart/workers/" + j.AgentIp)
+  workerBytes, _ := ds.Get("mozart/workers/" + j.AgentIP)
   if workerBytes != nil {
     err := json.Unmarshal(workerBytes, &worker)
     if err != nil {
@@ -123,24 +130,24 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
   //Save key to config
   var newWorker Worker
   if workerBytes == nil {
-    newWorker = Worker{AgentIp: j.AgentIp, AgentPort: "49433", ServerKey: serverKey, AgentKey: j.AgentKey, Containers: make(map[string]string), Status: "active"}
+    newWorker = Worker{AgentIP: j.AgentIP, AgentPort: "49433", ServerKey: serverKey, AgentKey: j.AgentKey, Containers: make(map[string]string), Status: "active"}
   } else {
-    newWorker = Worker{AgentIp: j.AgentIp, AgentPort: "49433", ServerKey: serverKey, AgentKey: j.AgentKey, Containers: worker.Containers, Status: "active"}
+    newWorker = Worker{AgentIP: j.AgentIP, AgentPort: "49433", ServerKey: serverKey, AgentKey: j.AgentKey, Containers: worker.Containers, Status: "active"}
   }
 
   //workers.mux.Lock()
-  //workers.Workers[j.AgentIp] = newWorker
+  //workers.Workers[j.AgentIP] = newWorker
   //writeFile("workers", "workers.data")
   //workers.mux.Unlock()
   b, err := json.Marshal(newWorker)
   if err != nil {
     panic(err)
   }
-  ds.Put("mozart/workers/" + j.AgentIp, b)
+  ds.Put("mozart/workers/" + j.AgentIP, b)
 
   // //Get worker container run list
   // var worker Worker
-  // workerBytes, _ := ds.Get("mozart/workers/" + j.AgentIp)
+  // workerBytes, _ := ds.Get("mozart/workers/" + j.AgentIP)
   // if workerBytes != nil {
   //   err = json.Unmarshal(workerBytes, &worker)
   //   if err != nil {
@@ -177,7 +184,7 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
   workerContainers := make(map[string]Container)
   //containers.mux.Lock()
   for _, container := range containers {
-    if container.Worker == j.AgentIp {
+    if container.Worker == j.AgentIP {
       workerContainers[container.Name] = container
     }
   }
@@ -187,6 +194,7 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(resp)
 }
 
+//ContainersCreateHandler - Create container
 func ContainersCreateHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "application/json; charset=UTF-8")
   w.WriteHeader(http.StatusOK)
@@ -194,7 +202,7 @@ func ContainersCreateHandler(w http.ResponseWriter, r *http.Request) {
 
   j := ContainerConfig{}
   json.NewDecoder(r.Body).Decode(&j)
-  if(ContainersCreateVerification(j)){
+  if(containersCreateVerification(j)){
     fmt.Println("Received a run request for config: ", j, "adding to queue.")
     containerQueue <- j
       /*
@@ -212,6 +220,7 @@ func ContainersCreateHandler(w http.ResponseWriter, r *http.Request) {
   }
 }
 
+//ContainersStopHandler - stop container
 func ContainersStopHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "application/json; charset=UTF-8")
   w.WriteHeader(http.StatusOK)
@@ -248,6 +257,7 @@ func ContainersStopHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
+//ContainersStateUpdateHandler - Update container state
 func ContainersStateUpdateHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "application/json; charset=UTF-8")
   w.WriteHeader(http.StatusOK)
@@ -304,6 +314,7 @@ func ContainersStateUpdateHandler(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(resp)
 }
 
+//ContainersListHandler - List all containers
 func ContainersListHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "application/json; charset=UTF-8")
   w.WriteHeader(http.StatusOK)
@@ -326,9 +337,10 @@ func ContainersListHandler(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(resp)
 }
 
+//CheckAccountAuth - Middleware to handle auth
 func CheckAccountAuth(handler http.HandlerFunc) http.HandlerFunc {
   return func(w http.ResponseWriter, r *http.Request) {
-    //Get Auth infomation from headers
+    //Get Auth information from headers
     headerAccount := r.Header.Get("Account")
     headerAccessKey := r.Header.Get("Access-Key")
     headerSecretKey := r.Header.Get("Secret-Key")
@@ -366,6 +378,7 @@ func CheckAccountAuth(handler http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+//AccountsCreateHandler - Create an account
 func AccountsCreateHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "application/json; charset=UTF-8")
   w.WriteHeader(http.StatusOK)
@@ -430,6 +443,7 @@ func AccountsCreateHandler(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(resp)
 }
 
+//AccountsListHandler - List all accounts
 func AccountsListHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "application/json; charset=UTF-8")
   w.WriteHeader(http.StatusOK)
@@ -455,6 +469,7 @@ func AccountsListHandler(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(resp)
 }
 
+//WorkersListHandler - List all workers
 func WorkersListHandler(w http.ResponseWriter, r *http.Request) {
   w.Header().Set("Content-Type", "application/json; charset=UTF-8")
   w.WriteHeader(http.StatusOK)
@@ -479,40 +494,7 @@ func WorkersListHandler(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(resp)
 }
 
-/*
-func ContainersListWorkersHandler(w http.ResponseWriter, r *http.Request) {
-  w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-  w.WriteHeader(http.StatusOK)
-  vars := mux.Vars(r)
-  defer r.Body.Close()
-
-  type ContainersListWorkers struct {
-    Containers []Container
-    Success bool
-    Error string
-  }
-
-  c := ContainersListWorkers{[]Container{}, true, ""}
-  for _, container := range containers.Containers {
-    if (container.Worker == vars["worker"]){
-      c.Containers = append(c.Containers, container)
-    }
-  }
-
-  resp := c
-  json.NewEncoder(w).Encode(resp)
-}
-
-func NodeListHandler(w http.ResponseWriter, r *http.Request) {
-  w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-  w.WriteHeader(http.StatusOK)
-  defer r.Body.Close()
-
-  resp := NodeListResp{workers.Workers, true, ""}
-  json.NewEncoder(w).Encode(resp)
-}
-*/
-func startAccountAndJoinServer(serverIp string, joinPort string, caCert string, serverCert string, serverKey string){
+func startAccountAndJoinServer(serverIP string, joinPort string, caCert string, serverCert string, serverKey string){
   router := mux.NewRouter().StrictSlash(true)
 
 	router.HandleFunc("/nodes/initialjoin", NodeInitialJoinHandler)
@@ -531,7 +513,7 @@ func startAccountAndJoinServer(serverIp string, joinPort string, caCert string, 
 
   //Setup server config
   server := &http.Server{
-        Addr: serverIp + ":" + joinPort,
+        Addr: serverIP + ":" + joinPort,
         Handler: handler}
 
   //Start Join server
@@ -540,7 +522,7 @@ func startAccountAndJoinServer(serverIp string, joinPort string, caCert string, 
   log.Fatal(err)
 }
 
-func startApiServer(serverIp string, serverPort string, caCert string, serverCert string, serverKey string) {
+func startAPIServer(serverIP string, serverPort string, caCert string, serverCert string, serverKey string) {
   router := mux.NewRouter().StrictSlash(true)
 	router.HandleFunc("/", RootHandler)
 
@@ -584,7 +566,7 @@ func startApiServer(serverIp string, serverPort string, caCert string, serverCer
 
   //Setup server config
   server := &http.Server{
-        Addr: serverIp + ":" + serverPort,
+        Addr: serverIP + ":" + serverPort,
         Handler: handler,
         TLSConfig: tlsCfg}
 
@@ -592,6 +574,6 @@ func startApiServer(serverIp string, serverPort string, caCert string, serverCer
   //Start API server
   err = server.ListenAndServeTLS(serverCert, serverKey)
 	//handler := cors.Default().Handler(router)
-  //err = http.ListenAndServe(ServerIp + ":" + ServerPort, handler)
+  //err = http.ListenAndServe(serverIP + ":" + ServerPort, handler)
   log.Fatal(err)
 }

@@ -37,7 +37,7 @@ func containerControllerRetryQueue(messages chan ControllerMsg) {
   }
 }
 
-func containerControllerUpdateStateWithoutMux(containerName, state, serverIp string) {
+func containerControllerUpdateStateWithoutMux(containerName, state, ServerIP string) {
   //Check if container exist
   //if _, ok := containers.Containers[containerName]; !ok {
   //  return
@@ -58,8 +58,8 @@ func containerControllerUpdateStateWithoutMux(containerName, state, serverIp str
   j := StateUpdateReq{Key: "ADDCHECKINGFORTHIS", ContainerName: containerName, State: state}
   b := new(bytes.Buffer)
   json.NewEncoder(b).Encode(j)
-  url := "https://" + serverIp + ":47433/containers/" + containerName + "/state/update"
-  _, err := callSecuredServer(agentTlsCert, agentTlsKey, caTLSCert, "POST", url, b)
+  url := "https://" + ServerIP + ":47433/containers/" + containerName + "/state/update"
+  _, err := callSecuredServer(agentTLSCert, agentTLSKey, caTLSCert, "POST", url, b)
   //_, err := http.Post(url, "application/json; charset=utf-8", b)
   if err != nil {
       panic(err)
@@ -67,7 +67,7 @@ func containerControllerUpdateStateWithoutMux(containerName, state, serverIp str
 }
 
 
-func containerControllerUpdateStateWithMux(containerName, state, serverIp string) {
+func containerControllerUpdateStateWithMux(containerName, state, ServerIP string) {
   //Check if container exist
   //if _, ok := containers.Containers[containerName]; !ok {
   //  return
@@ -90,8 +90,8 @@ func containerControllerUpdateStateWithMux(containerName, state, serverIp string
   j := StateUpdateReq{Key: "ADDCHECKINGFORTHIS", ContainerName: containerName, State: state}
   b := new(bytes.Buffer)
   json.NewEncoder(b).Encode(j)
-  url := "https://" + serverIp + ":47433/containers/" + containerName + "/state/update"
-  _, err := callSecuredServer(agentTlsCert, agentTlsKey, caTLSCert, "POST", url, b)
+  url := "https://" + ServerIP + ":47433/containers/" + containerName + "/state/update"
+  _, err := callSecuredServer(agentTLSCert, agentTLSKey, caTLSCert, "POST", url, b)
   //_, err := http.Post(url, "application/json; charset=utf-8", b)
   if err != nil {
       panic(err)

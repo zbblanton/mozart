@@ -28,12 +28,12 @@ func monitorWorkers() {
     //Loop through workers and make sure the desiredState matches the state, if not, perform DesiredState action.
     //workers.mux.Lock()
     for index, worker := range workers {
-      //if(checkWorkerHealth(worker.AgentIp, worker.AgentPort)){
+      //if(checkWorkerHealth(worker.AgentIP, worker.AgentPort)){
       //  fmt.Println("Worker " + index + " is UP.")
       //} else {
       if worker.Status != "reconnecting" && worker.Status != "disconnected"{
         fmt.Println("Checking Worker " + index + ".")
-        if(!checkWorkerHealth(worker.AgentIp, worker.AgentPort)){
+        if(!checkWorkerHealth(worker.AgentIP, worker.AgentPort)){
           fmt.Println("Worker " + index + " is DOWN.")
           //Need to add an update state function here for mux control like we have for container state
           worker.Status = "reconnecting"

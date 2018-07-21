@@ -4,13 +4,10 @@ import(
   "os"
   "bytes"
   "fmt"
-	//"log"
 	"encoding/json"
   "crypto/rand"
 	"encoding/base64"
-	//"net/http"
   "crypto/rsa"
-	//"crypto/tls"
 	"crypto/x509"
   "crypto/sha256"
   "encoding/pem"
@@ -20,14 +17,14 @@ import(
 //Step 2: Send join key and CSR and receive CA
 //Step 3: Verify CA hash matches our hash and save Cert
 //Step 4: Send IP, name, join key, agent key. Receive server key
-func joinAgent(serverIp string, agentIp string, joinKey string, agentCaHash string) string{
+func joinAgent(serverIP string, agentIP string, joinKey string, agentCaHash string) string{
   //Step 1
   fmt.Println("Starting Join Process...")
   fmt.Println("Generating Private Key...")
   privateKey, _ := rsa.GenerateKey(rand.Reader, 2048)
-  agentTlsKey = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
+  agentTLSKey = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
   fmt.Println("Generating CSR...")
-  csr, err := generateCSR(privateKey, agentIp)
+  csr, err := generateCSR(privateKey, agentIP)
   if err != nil {
 		panic(err)
 	}
@@ -37,17 +34,17 @@ func joinAgent(serverIp string, agentIp string, joinKey string, agentCaHash stri
   csrString := base64.URLEncoding.EncodeToString(csr)
 
   type NodeInitialJoinReq struct {
-    AgentIp string
+    AgentIP string
     JoinKey string
     Csr string
   }
 
-  j := NodeInitialJoinReq{AgentIp: agentIp, JoinKey: joinKey, Csr: csrString}
+  j := NodeInitialJoinReq{AgentIP: agentIP, JoinKey: joinKey, Csr: csrString}
   b := new(bytes.Buffer)
   json.NewEncoder(b).Encode(j)
   fmt.Println("Sending initial join request...")
 
-  resp, err := callInsecuredServer("POST", "https://" + serverIp + ":48433/nodes/initialjoin", b)
+  resp, err := callInsecuredServer("POST", "https://" + serverIP + ":48433/nodes/initialjoin", b)
   if err != nil {
 		panic(err)
 	}
@@ -102,7 +99,7 @@ func joinAgent(serverIp string, agentIp string, joinKey string, agentCaHash stri
     panic(err)
   }
   fmt.Println("Saving agent cert")
-  agentTlsCert = cert
+  agentTLSCert = cert
 
   //Step 4 (NEED TO ADD CA TO POST!!!)
   fmt.Println("The join key is: ", joinKey)
@@ -122,19 +119,19 @@ func joinAgent(serverIp string, agentIp string, joinKey string, agentCaHash stri
     JoinKey string
     AgentKey string
     Type string
-    AgentIp string
+    AgentIP string
     AgentPort string
   }
 
-  joinReq := NodeJoinReq{JoinKey: joinKey, AgentKey: agentAuthKey, Type: "worker", AgentIp: agentIp, AgentPort: "8080"}
+  joinReq := NodeJoinReq{JoinKey: joinKey, AgentKey: agentAuthKey, Type: "worker", AgentIP: agentIP, AgentPort: "8080"}
   b2 := new(bytes.Buffer)
   json.NewEncoder(b2).Encode(joinReq)
 
-  url := "https://" + serverIp + ":47433/nodes/join"
+  url := "https://" + serverIP + ":47433/nodes/join"
 
   fmt.Println("Sending secured join request...")
 
-  secureResp, err := callSecuredServer(agentTlsCert, agentTlsKey, caTLSCert, "POST", url, b2)
+  secureResp, err := callSecuredServer(agentTLSCert, agentTLSKey, caTLSCert, "POST", url, b2)
   if err != nil {
 		panic(err)
 	}
@@ -163,21 +160,21 @@ func joinAgent(serverIp string, agentIp string, joinKey string, agentCaHash stri
     //Get IDs for mozart Containers
     var keepRunningList []string
     for _, container := range joinResp.Containers {
-      id, _ := DockerGetId(container.Name)
+      id, _ := DockerGetID(container.Name)
       keepRunningList = append(keepRunningList, id)
     }
 
     currentRunningList, _ := DockerList()
-    for _, containerId := range currentRunningList {
+    for _, containerID := range currentRunningList {
       found := false
       for _, keepRunningItem := range keepRunningList {
-        if containerId == keepRunningItem {
+        if containerID == keepRunningItem {
           found = true
           break
         }
       }
       if !found {
-        DockerStopContainer(containerId)
+        DockerStopContainer(containerID)
       }
     }
   }

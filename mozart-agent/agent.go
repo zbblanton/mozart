@@ -18,6 +18,8 @@ import(
   "io"
 )
 
+
+//Container - Container information
 type Container struct {
   Name string
   State string
@@ -26,17 +28,20 @@ type Container struct {
   Worker string
 }
 
+//Containers - Map to hold containers
 type Containers struct {
   Containers map[string]Container
   mux sync.Mutex
 }
 
+//ExposedPort - Struct to expose a container port
 type ExposedPort struct {
 	ContainerPort string
 	HostPort string
-	HostIp string
+	HostIP string
 }
 
+//Mount - Struct to mount a data to a container
 type Mount struct {
 	Target string
 	Source string
@@ -44,6 +49,7 @@ type Mount struct {
 	ReadOnly bool
 }
 
+//ContainerConfig - Config for a container
 type ContainerConfig struct {
 	Name string
 	Image string
@@ -53,19 +59,14 @@ type ContainerConfig struct {
 	AutoRemove bool
 	Privileged bool
 }
-/*
-type DockerContainerHostConfigMounts struct {
-  Target string
-	Source string
-	Type string
-	ReadOnly bool
-}
-*/
+
+//DockerContainerHostConfigPortBindings - Used to help parse the docker API
 type DockerContainerHostConfigPortBindings struct {
-  HostIp string
+  HostIP string
   HostPort string
 }
 
+//DockerContainerHostConfig - Used to help parse the docker API
 type DockerContainerHostConfig struct {
   PortBindings map[string][]DockerContainerHostConfigPortBindings
   Mounts []Mount
@@ -73,6 +74,7 @@ type DockerContainerHostConfig struct {
   Privileged bool
 }
 
+//DockerContainerConfig - Used to help parse the docker API
 type DockerContainerConfig struct {
   Image string
   Env []string
@@ -80,42 +82,44 @@ type DockerContainerConfig struct {
   ExposedPorts map[string]struct{}
   HostConfig DockerContainerHostConfig
 }
-/*
-type CreateReq struct {
-  Key string
-  Container ContainerConfig
-}
-*/
+
+//CreateReq - Request for creating a container
 type CreateReq struct {
   Key string
   Container Container
 }
 
+//StopReq - Request for stopping a container
 type StopReq struct {
   Key string
   ContainerName string
 }
 
+//CreateResp - Response for creating a container
 type CreateResp struct {
   Success bool `json:"success"`
   Error string `json:"error"`
 }
 
+//Req - Request
 type Req struct {
   Key string `json:"key"`
   Command string `json:"command"`
 }
 
+//Resp - Generic response
 type Resp struct {
   Success bool `json:"success"`
   Error string `json:"error"`
 }
 
+//Config - Agent config
 type Config struct {
   ServerKey string
   mux sync.Mutex
 }
 
+//ControllerMsg - Controller message
 type ControllerMsg struct {
   Action string
   Data interface{}
@@ -127,10 +131,6 @@ func (c *Config) getServerKey() string {
   serverKey := c.ServerKey
   c.mux.Unlock()
   return serverKey
-}
-
-func fakeDial(proto, addr string) (conn net.Conn, err error) {
-  return net.Dial("unix", "/var/run/docker.sock")
 }
 
 func getContainerRuntime() string {
@@ -200,14 +200,14 @@ func callSecuredServer(pubKey, privKey, ca []byte, method string, url string, bo
   return respBody, nil
 }
 
-func generateCSR(privateKey *rsa.PrivateKey, Ip string) (csr []byte, err error) {
+func generateCSR(privateKey *rsa.PrivateKey, IP string) (csr []byte, err error) {
   //CSR config
   csrSubject := pkix.Name{
       Organization:  []string{"Mozart"}}
   csrConfig := &x509.CertificateRequest{
     Subject: csrSubject,
     PublicKey: privateKey,
-    IPAddresses:  []net.IP{net.ParseIP(Ip)}}
+    IPAddresses:  []net.IP{net.ParseIP(IP)}}
 
   csr, err = x509.CreateCertificateRequest(rand.Reader, csrConfig, privateKey)
   if err != nil {
@@ -223,15 +223,15 @@ func stopAllMozartContainers() {
     panic("Could not get list of mozart containers on host")
   }
   fmt.Println("Stopping mozart containers that should not be running.")
-  for _, containerId := range list {
-    //fmt.Println("Stopping container:", containerId)
-    DockerStopContainer(containerId)
+  for _, containerID := range list {
+    //fmt.Println("Stopping container:", containerID)
+    DockerStopContainer(containerID)
   }
 }
 
 var config = Config{ServerKey: ""}
-var agentTlsKey = []byte{}
-var agentTlsCert = []byte{}
+var agentTLSKey = []byte{}
+var agentTLSCert = []byte{}
 var caTLSCert = []byte{}
 
 var containerQueue = make(chan ControllerMsg, 3)
@@ -298,5 +298,5 @@ func main() {
   go containerControllerQueue(containerQueue)
   go containerControllerRetryQueue(containerRetryQueue)
   go MonitorContainers(*serverPtr, *agentPtr)
-	startAgentApi("49433")
+	startAgentAPI("49433")
 }

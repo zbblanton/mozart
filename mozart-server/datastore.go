@@ -7,7 +7,7 @@ import (
   "github.com/boltdb/bolt"
 )
 
-//Default datastore interface
+//DataStore - Default datastore interface
 type DataStore interface {
   Init()
   Close()
@@ -20,13 +20,14 @@ type DataStore interface {
   ifExist(key string) (exist bool, err error)
 }
 
-//File Datastore
+//FileDataStore - File Datastore
 type FileDataStore struct {
   Path string
   DefaultBucket string
   db *bolt.DB
 }
 
+//Init - Initialize file based datastore
 func (f *FileDataStore) Init() {
   var err error
   f.db, err = bolt.Open(f.Path, 0600, nil)
@@ -47,10 +48,12 @@ func (f *FileDataStore) Init() {
 	}
 }
 
+//Close - Close file based datastore
 func (f *FileDataStore) Close() {
   f.db.Close()
 }
 
+//Get - Get file based datastore
 func (f *FileDataStore) Get(key string) (val []byte, err error) {
   err = f.db.View(func(tx *bolt.Tx) error {
     val = tx.Bucket([]byte(f.DefaultBucket)).Get([]byte(key))
@@ -59,6 +62,7 @@ func (f *FileDataStore) Get(key string) (val []byte, err error) {
   return val, err
 }
 
+//GetByPrefix - Get keys by prefix for file based datastore
 func (f *FileDataStore) GetByPrefix(prefix string) (kv map[string][]byte, err error){
   kv = make(map[string][]byte)
   err = f.db.View(func(tx *bolt.Tx) error {
@@ -75,6 +79,7 @@ func (f *FileDataStore) GetByPrefix(prefix string) (kv map[string][]byte, err er
   return kv, err
 }
 
+//Put - Put key in datastore
 func (f *FileDataStore) Put(key string, val []byte) error{
   err := f.db.Update(func(tx *bolt.Tx) error {
     //err := tx.Bucket([]byte("data")).Put([]byte(key), buf.Bytes())
@@ -88,7 +93,7 @@ func (f *FileDataStore) Put(key string, val []byte) error{
   return err
 }
 
-//func (f *FileDataStore) Puts(key string, vals [][]byte) error{
+//Puts - Puts keys in datastore
 func (f *FileDataStore) Puts(kv map[string][]byte) error{
   err := f.db.Update(func(tx *bolt.Tx) error {
     //err := tx.Bucket([]byte("data")).Put([]byte(key), buf.Bytes())
@@ -107,6 +112,7 @@ func (f *FileDataStore) Puts(kv map[string][]byte) error{
   return err
 }
 
+//Del - Delete key from datastore
 func (f *FileDataStore) Del(key string) error {
   err := f.db.Update(func(tx *bolt.Tx) error {
     return tx.Bucket([]byte(f.DefaultBucket)).Delete([]byte(key))
@@ -114,6 +120,7 @@ func (f *FileDataStore) Del(key string) error {
   return err
 }
 
+//Dels - Delete keys from datastore
 func (f *FileDataStore) Dels(keys []string) error {
   err := f.db.Update(func(tx *bolt.Tx) error {
     for _, key :=  range keys {
@@ -127,6 +134,7 @@ func (f *FileDataStore) Dels(keys []string) error {
   return err
 }
 
+//ifExist - Check if key exist in datastore
 func (f *FileDataStore) ifExist(key string) (exist bool, err error) {
   var val []byte
   err = f.db.View(func(tx *bolt.Tx) error {

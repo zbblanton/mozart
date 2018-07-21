@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"encoding/json"
 	"encoding/base64"
-	//"flag"
 	"gopkg.in/urfave/cli.v1"
 	"bufio"
 	"github.com/olekukonko/tablewriter"
@@ -21,9 +20,10 @@ import (
 	"bytes"
 )
 
+//Config - Server and control config
 type Config struct {
   Name string
-  ServerIp string
+  ServerIP string
   ServerPort string
   AgentPort string
   AgentJoinKey string
@@ -33,6 +33,7 @@ type Config struct {
   ServerKey string
 }
 
+//Container - Container struct
 type Container struct {
 	Name string
 	State string
@@ -40,24 +41,28 @@ type Container struct {
 	Worker string
 }
 
+//ContainerListResp - Response for container list
 type ContainerListResp struct {
 	Containers map[string]Container
 	Success bool
 	Error string
 }
 
+//Worker - Worker struct
 type Worker struct {
-  AgentIp string
+  AgentIP string
   AgentPort string
   Status string
 }
 
+//WorkerListResp - Response for the worker list
 type WorkerListResp struct {
 	Workers map[string]Worker
 	Success bool
 	Error string
 }
 
+//Account - Account struct
 type Account struct {
   Type string
   Name string
@@ -67,12 +72,14 @@ type Account struct {
   Description string
 }
 
+//AccountsListResp - Response for accounts list
 type AccountsListResp struct {
   Accounts map[string]Account
   Success bool `json:"success"`
   Error string `json:"error"`
 }
 
+//Resp - Generic response
 type Resp struct {
   Success bool `json:"success"`
   Error string `json:"error"`
@@ -211,7 +218,7 @@ func clusterCreate(c *cli.Context) {
 	//Create config file
 	config := Config{
 	  Name: name,
-	  ServerIp: server,
+	  ServerIP: server,
 	  ServerPort: "47433",
 	  AgentPort: "49433",
 	  AgentJoinKey: joinKey,
@@ -240,8 +247,8 @@ func clusterPrint(c *cli.Context) {
 
 	fmt.Printf("\n\n\n")
 	fmt.Println("Once the server has been set up, add workers by running this command:")
-	//fmt.Printf("mozart-agent --server=%s --agent=INSERT_AGENT_IP --key=%s --ca-hash=%s", config.ServerIp, config.AgentJoinKey, caHash)
-	fmt.Printf(`docker run --name mozart-agent -d --restart=always --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 49433:49433 -e "MOZART_SERVER_IP=%s" -e "MOZART_JOIN_KEY=%s" -e "MOZART_CA_HASH=%s" zbblanton/mozart-agent`, config.ServerIp, config.AgentJoinKey, caHash)
+	//fmt.Printf("mozart-agent --server=%s --agent=INSERT_AGENT_IP --key=%s --ca-hash=%s", config.ServerIP, config.AgentJoinKey, caHash)
+	fmt.Printf(`docker run --name mozart-agent -d --restart=always --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 49433:49433 -e "MOZART_SERVER_IP=%s" -e "MOZART_JOIN_KEY=%s" -e "MOZART_CA_HASH=%s" zbblanton/mozart-agent`, config.ServerIP, config.AgentJoinKey, caHash)
 	fmt.Printf("\n\n\n")
 }
 
@@ -306,7 +313,7 @@ func accountsCreate(c *cli.Context) {
 
 	b := new(bytes.Buffer)
   json.NewEncoder(b).Encode(newAccount)
-	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/accounts/create"
+	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/accounts/create"
 	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "POST", url, b)
   if err != nil {
 		panic(err)
@@ -337,7 +344,7 @@ func accountsCreate(c *cli.Context) {
 func accountsList(c *cli.Context) {
   config := readConfigFile("/etc/mozart/config.json")
 
-	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/accounts/list"
+	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/accounts/list"
 	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "GET", url, nil)
 	if err != nil {
 		panic(err)
@@ -378,7 +385,7 @@ func containerRun(c *cli.Context) {
 
 	configReader := bufio.NewReader(f)
 
-	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/containers/create"
+	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/containers/create"
 	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "POST", url, configReader)
   if err != nil {
 		panic(err)
@@ -402,7 +409,7 @@ func containerStop(c *cli.Context) {
 		panic("Must provide the name or id of the container.")
 	}
 
-	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/containers/stop/" + c.Args().First()
+	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/containers/stop/" + c.Args().First()
 	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "GET", url, nil)
   if err != nil {
 		panic(err)
@@ -422,7 +429,7 @@ func containerStop(c *cli.Context) {
 func containerList(c *cli.Context) {
     config := readConfigFile("/etc/mozart/config.json")
 
-	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/containers/list"
+	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/containers/list"
 	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "GET", url, nil)
 	if err != nil {
 		panic(err)
@@ -449,7 +456,7 @@ func containerList(c *cli.Context) {
 func workersList(c *cli.Context) {
     config := readConfigFile("/etc/mozart/config.json")
 
-	url := "https://" + config.ServerIp + ":" + config.ServerPort + "/workers/list"
+	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/workers/list"
 	resp, err := callSecuredServer(defaultSSLPath + config.Name + "-client.crt", defaultSSLPath + config.Name + "-client.key", defaultSSLPath + config.Name + "-ca.crt", "GET", url, nil)
 	if err != nil {
 		panic(err)
@@ -468,7 +475,7 @@ func workersList(c *cli.Context) {
 	table := tablewriter.NewWriter(os.Stdout)
 	table.SetHeader([]string{"IP", "Port", "Status"})
 	for _, n := range respBody.Workers {
-	   table.Append([]string{n.AgentIp, n.AgentPort, n.Status})
+	   table.Append([]string{n.AgentIP, n.AgentPort, n.Status})
 	}
 	table.Render() // Send output
 }

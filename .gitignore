@@ -1,3 +1,4 @@
 mozart-server/config.data
 mozart-server/containers.data
 mozart-server/workers.data
+mozart-server/mozart.db

@@ -14,6 +14,7 @@ import(
   "crypto/tls"
 )
 
+//RootHandler - Handles the default route
 func RootHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
@@ -41,6 +42,7 @@ func RootHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+//CreateHandler - Handles the create route
 func CreateHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
@@ -74,6 +76,7 @@ func CreateHandler(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(p)
 }
 
+//StopHandler - Handles the stop route
 func StopHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
@@ -99,6 +102,7 @@ func StopHandler(w http.ResponseWriter, r *http.Request) {
   }
 }
 
+//HealthHandler - Handles the health checking route
 func HealthHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
@@ -114,6 +118,7 @@ func HealthHandler(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(p)
 }
 
+//JoinHandler - Handles the join route
 func JoinHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
@@ -129,7 +134,7 @@ func JoinHandler(w http.ResponseWriter, r *http.Request) {
   json.NewEncoder(w).Encode(p)
 }
 
-func startAgentApi(port string){
+func startAgentAPI(port string){
   router := mux.NewRouter().StrictSlash(true)
 
 	router.HandleFunc("/", RootHandler)
@@ -150,7 +155,7 @@ func startAgentApi(port string){
     panic("Cannot parse root CA.")
   }
   //load signed keypair
-  signedKeyPair, err := tls.X509KeyPair(agentTlsCert, agentTlsKey)
+  signedKeyPair, err := tls.X509KeyPair(agentTLSCert, agentTLSKey)
   if err != nil {
 		panic(err)
 	}

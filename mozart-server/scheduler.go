@@ -33,7 +33,7 @@ func selectWorker() (w Worker, err error) {
   //Add all workers that are active to the worker pool.
   for _, worker := range workers {
     if worker.Status == "connected" || worker.Status == "active" {
-      workerPool[worker.AgentIp] = 0
+      workerPool[worker.AgentIP] = 0
     }
   }
 
@@ -64,22 +64,22 @@ func selectWorker() (w Worker, err error) {
   //Find the lowest used worker
   firstRun := true
   lowestWorker := ""
-  var lowestContainers uint = 0
-  for workerIp, numContainers := range workerPool {
+  var lowestContainers uint
+  for workerIP, numContainers := range workerPool {
     //If a worker in the pool has no containers, return it.
     if numContainers == 0 {
-      fmt.Println("First container so Worker", workerIp, "selected.")
-      return workers["mozart/workers/" + workerIp], nil
+      fmt.Println("First container so Worker", workerIP, "selected.")
+      return workers["mozart/workers/" + workerIP], nil
     }
 
     if(firstRun){
       firstRun = false
       lowestContainers = numContainers
-      lowestWorker = workerIp
+      lowestWorker = workerIP
     }
 
     if(numContainers < lowestContainers) {
-      lowestWorker = workerIp
+      lowestWorker = workerIP
       lowestContainers = numContainers
     }
   }
