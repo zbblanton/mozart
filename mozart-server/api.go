@@ -39,7 +39,7 @@ func NodeInitialJoinHandler(w http.ResponseWriter, r *http.Request) {
 	if j.JoinKey != config.AgentJoinKey {
 		fmt.Println(config.AgentJoinKey)
 		fmt.Println(j.JoinKey)
-		resp := NodeJoinResp{ServerKey: "", Success: false, Error: "Invalid join key"}
+		resp := Resp{Success: false, Error: "Invalid join key"}
 		json.NewEncoder(w).Encode(resp)
 		return
 	}
@@ -47,7 +47,7 @@ func NodeInitialJoinHandler(w http.ResponseWriter, r *http.Request) {
 	//Decode the CSR from base64
 	csr, err := base64.URLEncoding.DecodeString(j.Csr)
 	if err != nil {
-		resp := NodeJoinResp{ServerKey: "", Success: false, Error: "Error during initial join."}
+		resp := Resp{Success: false, Error: "Error during initial join."}
 		json.NewEncoder(w).Encode(resp)
 		return
 	}
@@ -55,7 +55,7 @@ func NodeInitialJoinHandler(w http.ResponseWriter, r *http.Request) {
 	//Sign the CSR
 	signedCert, err := signCSR(config.CaCert, config.CaKey, csr, j.AgentIP)
 	if err != nil {
-		resp := NodeJoinResp{ServerKey: "", Success: false, Error: "Error during initial join."}
+		resp := Resp{Success: false, Error: "Error during initial join."}
 		json.NewEncoder(w).Encode(resp)
 		return
 	}
@@ -66,7 +66,7 @@ func NodeInitialJoinHandler(w http.ResponseWriter, r *http.Request) {
 	//Prepare CA to be sent to agent
 	ca, err := ioutil.ReadFile(config.CaCert)
 	if err != nil {
-		resp := NodeJoinResp{ServerKey: "", Success: false, Error: "Error during initial join."}
+		resp := Resp{Success: false, Error: "Error during initial join."}
 		json.NewEncoder(w).Encode(resp)
 		return
 	}
@@ -91,24 +91,10 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
 	if j.JoinKey != config.AgentJoinKey {
 		fmt.Println(config.AgentJoinKey)
 		fmt.Println(j.JoinKey)
-		resp := NodeJoinResp{ServerKey: "", Success: false, Error: "Invalid join key"}
+		resp := Resp{Success: false, Error: "Invalid join key"}
 		json.NewEncoder(w).Encode(resp)
 		return
 	}
-
-	// //Create worker map
-	// workers := make(map[string]Worker)
-	//
-	// //Get all workers
-	// dataBytes, _ := ds.GetByPrefix("mozart/workers")
-	// for k, v := range dataBytes {
-	//   var data Worker
-	//   err := json.Unmarshal(v, &data)
-	//   if err != nil {
-	//     panic(err)
-	//   }
-	//   workers[k] = data
-	// }
 
 	//Check if worker exist and if it has an active or maintenance status
 	//if worker, ok := workers["mozart/workers/" + j.AgentIP]; ok {
@@ -117,11 +103,14 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
 	if workerBytes != nil {
 		err := json.Unmarshal(workerBytes, &worker)
 		if err != nil {
-			panic(err)
+			eventError(err)
+			resp := Resp{Success: false, Error: err.Error()}
+			json.NewEncoder(w).Encode(resp)
+			return
 		}
 
 		if worker.Status == "active" || worker.Status == "connected" || worker.Status == "maintenance" {
-			resp := NodeJoinResp{ServerKey: "", Success: false, Error: "Host already exist and has an active or maintenance status. (This is okay if host is rejoining, just retry until it reconnects!)"}
+			resp := Resp{Success: false, Error: "Host already exist and has an active or maintenance status. (This is okay if host is rejoining, just retry until it reconnects!)"}
 			json.NewEncoder(w).Encode(resp)
 			return
 		}
@@ -144,25 +133,14 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
 		newWorker = Worker{AgentIP: j.AgentIP, AgentPort: "49433", ServerKey: serverKey, AgentKey: j.AgentKey, Containers: worker.Containers, Status: "active"}
 	}
 
-	//workers.mux.Lock()
-	//workers.Workers[j.AgentIP] = newWorker
-	//writeFile("workers", "workers.data")
-	//workers.mux.Unlock()
 	b, err := json.Marshal(newWorker)
 	if err != nil {
-		panic(err)
+		eventError(err)
+		resp := Resp{Success: false, Error: err.Error()}
+		json.NewEncoder(w).Encode(resp)
+		return
 	}
 	ds.Put("mozart/workers/"+j.AgentIP, b)
-
-	// //Get worker container run list
-	// var worker Worker
-	// workerBytes, _ := ds.Get("mozart/workers/" + j.AgentIP)
-	// if workerBytes != nil {
-	//   err = json.Unmarshal(workerBytes, &worker)
-	//   if err != nil {
-	//     panic(err)
-	//   }
-	// }
 
 	//Create containers map
 	workerContainers := make(map[string]Container)
@@ -173,32 +151,14 @@ func NodeJoinHandler(w http.ResponseWriter, r *http.Request) {
 		c, _ := ds.Get("mozart/containers/" + containerName)
 		err = json.Unmarshal(c, &container)
 		if err != nil {
-			panic(err)
+			eventError(err)
+			resp := Resp{Success: false, Error: err.Error()}
+			json.NewEncoder(w).Encode(resp)
+			return
 		}
 		workerContainers[containerName] = container
 	}
-	/*
-	  //Get containers
-	  dataBytes, _ = ds.GetByPrefix("mozart/containers")
-	  for k, v := range dataBytes {
-	    var data Container
-	    err = json.Unmarshal(v, &data)
-	    if err != nil {
-	      panic(err)
-	    }
-	    containers[k] = data
-	  }
 
-	  //Send containers and key to worker
-	  workerContainers := make(map[string]Container)
-	  //containers.mux.Lock()
-	  for _, container := range containers {
-	    if container.Worker == j.AgentIP {
-	      workerContainers[container.Name] = container
-	    }
-	  }
-	*/
-	//containers.mux.Unlock()
 	resp := NodeJoinResp{ServerKey: serverKey, Containers: workerContainers, Success: true, Error: ""}
 	json.NewEncoder(w).Encode(resp)
 }
@@ -214,13 +174,6 @@ func ContainersCreateHandler(w http.ResponseWriter, r *http.Request) {
 	if containersCreateVerification(j) {
 		fmt.Println("Received a run request for config: ", j, "adding to queue.")
 		containerQueue <- j
-		/*
-		   err := schedulerCreateContainer(j)
-		   if err != nil {
-		     resp := Resp{false, "No workers!"} //Add better error.
-		     json.NewEncoder(w).Encode(resp)
-		     return
-		   }*/
 		resp := Resp{true, ""}
 		json.NewEncoder(w).Encode(resp)
 	} else {
@@ -254,16 +207,6 @@ func ContainersStopHandler(w http.ResponseWriter, r *http.Request) {
 		//Add to queue
 		containerQueue <- containerName
 	}
-	//containers.mux.Unlock()
-
-	/*
-	  err := schedulerStopContainer(containerName)
-	  if err != nil {
-	    resp := Resp{false, "Cannot find container"}
-	    json.NewEncoder(w).Encode(resp)
-	    return
-	  }*/
-
 }
 
 //ContainersStateUpdateHandler - Update container state
@@ -288,36 +231,44 @@ func ContainersStateUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	c, _ := ds.Get("mozart/containers/" + j.ContainerName)
 	err := json.Unmarshal(c, &container)
 	if err != nil {
-		panic(err)
+		eventError(err)
+		resp := Resp{Success: false, Error: err.Error()}
+		json.NewEncoder(w).Encode(resp)
+		return
 	}
 	if j.State == "stopped" && container.DesiredState == "stopped" {
-		//delete(containers.Containers, j.ContainerName)
 		ds.Del("mozart/containers/" + container.Name)
 		//Update worker container run list
 		var worker Worker
 		workerBytes, _ := ds.Get("mozart/workers/" + container.Worker)
 		err = json.Unmarshal(workerBytes, &worker)
 		if err != nil {
-			panic(err)
+			eventError(err)
+			resp := Resp{Success: false, Error: err.Error()}
+			json.NewEncoder(w).Encode(resp)
+			return
 		}
 		delete(worker.Containers, container.Name)
 		workerToBytes, err := json.Marshal(worker)
 		if err != nil {
-			panic(err)
+			eventError(err)
+			resp := Resp{Success: false, Error: err.Error()}
+			json.NewEncoder(w).Encode(resp)
+			return
 		}
 		ds.Put("mozart/workers/"+container.Worker, workerToBytes)
 	} else {
-		//c := containers.Containers[j.ContainerName]
 		container.State = j.State
 		fmt.Print(container)
-		//containers.Containers[j.ContainerName] = c
 		b, err := json.Marshal(container)
 		if err != nil {
-			panic(err)
+			eventError(err)
+			resp := Resp{Success: false, Error: err.Error()}
+			json.NewEncoder(w).Encode(resp)
+			return
 		}
 		ds.Put("mozart/containers/"+container.Name, b)
 	}
-	//containers.mux.Unlock()
 
 	resp := Resp{true, ""}
 	json.NewEncoder(w).Encode(resp)
@@ -337,7 +288,10 @@ func ContainersListHandler(w http.ResponseWriter, r *http.Request) {
 		var data Container
 		err := json.Unmarshal(v, &data)
 		if err != nil {
-			panic(err)
+			eventError(err)
+			resp := Resp{Success: false, Error: err.Error()}
+			json.NewEncoder(w).Encode(resp)
+			return
 		}
 		containers[k] = data
 	}
@@ -398,12 +352,6 @@ func AccountsCreateHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	defer r.Body.Close()
 
-	/*type AccountCreateReq struct {
-	  AccessKey string
-	  SecretKey string
-	  Account Account
-	}*/
-
 	j := Account{}
 	json.NewDecoder(r.Body).Decode(&j)
 
@@ -441,7 +389,10 @@ func AccountsCreateHandler(w http.ResponseWriter, r *http.Request) {
 	//Save account
 	accountBytes, err := json.Marshal(j)
 	if err != nil {
-		panic(err)
+		eventError(err)
+		resp := Resp{Success: false, Error: err.Error()}
+		json.NewEncoder(w).Encode(resp)
+		return
 	}
 	ds.Put("mozart/accounts/"+j.Name, accountBytes)
 
@@ -470,7 +421,10 @@ func AccountsListHandler(w http.ResponseWriter, r *http.Request) {
 		var data Account
 		err := json.Unmarshal(v, &data)
 		if err != nil {
-			panic(err)
+			eventError(err)
+			resp := Resp{Success: false, Error: err.Error()}
+			json.NewEncoder(w).Encode(resp)
+			return
 		}
 		data.AccessKey = ""
 		data.SecretKey = ""
@@ -496,7 +450,10 @@ func WorkersListHandler(w http.ResponseWriter, r *http.Request) {
 		var data Worker
 		err := json.Unmarshal(v, &data)
 		if err != nil {
-			panic(err)
+			eventError(err)
+			resp := Resp{Success: false, Error: err.Error()}
+			json.NewEncoder(w).Encode(resp)
+			return
 		}
 		data.ServerKey = ""
 		data.AgentKey = ""
@@ -585,7 +542,5 @@ func startAPIServer(serverIP string, serverPort string, caCert string, serverCer
 
 	//Start API server
 	err = server.ListenAndServeTLS(serverCert, serverKey)
-	//handler := cors.Default().Handler(router)
-	//err = http.ListenAndServe(serverIP + ":" + ServerPort, handler)
 	log.Fatal(err)
 }

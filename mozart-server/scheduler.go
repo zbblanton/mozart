@@ -17,7 +17,7 @@ func selectWorker() (w Worker, err error) {
 		var data Worker
 		err = json.Unmarshal(v, &data)
 		if err != nil {
-			panic(err)
+			return Worker{}, err
 		}
 		workers[k] = data
 	}
@@ -47,7 +47,7 @@ func selectWorker() (w Worker, err error) {
 		var data Container
 		err = json.Unmarshal(v, &data)
 		if err != nil {
-			panic(err)
+			return Worker{}, err
 		}
 		containers[k] = data
 	}

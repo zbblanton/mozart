@@ -7,8 +7,8 @@ import (
 )
 
 func monitorWorkers() {
-	fmt.Println("Waiting 15 seconds before starting the worker controller!")
-	time.Sleep(time.Duration(15) * time.Second)
+	fmt.Println("Waiting 5 seconds before starting the worker controller!")
+	time.Sleep(time.Duration(5) * time.Second)
 	for {
 		//Create worker map
 		workers := make(map[string]Worker)
@@ -19,7 +19,8 @@ func monitorWorkers() {
 			var data Worker
 			err := json.Unmarshal(v, &data)
 			if err != nil {
-				panic(err)
+				eventError(err)
+				continue
 			}
 			workers[k] = data
 		}
@@ -39,7 +40,8 @@ func monitorWorkers() {
 					//workers[index] = worker
 					b, err := json.Marshal(worker)
 					if err != nil {
-						panic(err)
+						eventError(err)
+						continue
 					}
 					ds.Put(index, b)
 					///////////////////////////////////////////

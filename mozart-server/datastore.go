@@ -87,7 +87,7 @@ func (f *FileDataStore) Put(key string, val []byte) error {
 		return err
 	})
 	if err != nil {
-		panic(err)
+		eventError(err)
 	}
 
 	return err
@@ -106,7 +106,7 @@ func (f *FileDataStore) Puts(kv map[string][]byte) error {
 		return nil
 	})
 	if err != nil {
-		panic(err)
+		eventError(err)
 	}
 
 	return err

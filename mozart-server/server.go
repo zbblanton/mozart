@@ -220,50 +220,11 @@ func checkWorkerHealth(workerIP string, workerPort string) bool {
 	b := new(bytes.Buffer)
 	json.NewEncoder(b).Encode(j)
 	url := "https://" + workerIP + ":" + workerPort + "/health"
-
-	//The following code will allow for TLS auth, we will need to create a function for this later.
-	//-----Start-------
-	//Load our key pair
-	clientKeyPair, err := tls.LoadX509KeyPair(config.ServerCert, config.ServerKey)
+	resp, err := callSecuredAgent(serverTLSCert, serverTLSKey, caTLSCert, "POST", url, b)
 	if err != nil {
-		panic(err)
-	}
-
-	//Load CA
-	rootCa, err := ioutil.ReadFile(config.CaCert)
-	if err != nil {
-		panic("cant open file")
-	}
-
-	//Create a new cert pool
-	rootCAs := x509.NewCertPool()
-
-	// Append our ca cert to the system pool
-	if ok := rootCAs.AppendCertsFromPEM(rootCa); !ok {
-		fmt.Println("No certs appended, using system certs only")
-	}
-
-	// Trust cert pool in our client
-	clientConfig := &tls.Config{
-		InsecureSkipVerify: false,
-		RootCAs:            rootCAs,
-		Certificates:       []tls.Certificate{clientKeyPair},
-	}
-	clientTr := &http.Transport{TLSClientConfig: clientConfig}
-	secureClient := &http.Client{Transport: clientTr, Timeout: time.Second * 5}
-
-	// Still works with host-trusted CAs!
-	req, err := http.NewRequest(http.MethodPost, url, b)
-	if err != nil {
-		panic(err)
-	}
-	resp, err := secureClient.Do(req)
-	if err != nil {
-		fmt.Println(err)
+		eventError(err)
 		return false
 	}
-	defer resp.Body.Close()
-	//-----End-------
 
 	type healthCheckResp struct {
 		Health  string
@@ -272,13 +233,17 @@ func checkWorkerHealth(workerIP string, workerPort string) bool {
 	}
 
 	respj := healthCheckResp{}
-	json.NewDecoder(resp.Body).Decode(&respj)
-	//resp.Body.Close()
-	if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
-		return true
+	err = json.Unmarshal(resp, &respj)
+	if err != nil {
+		eventError(err)
+		return false
 	}
+	// //resp.Body.Close()
+	// if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
+	// 	return true
+	// }
 
-	return false
+	return true
 }
 
 //Only supports 1 IP.  No multiple hostname or IP support yet.
@@ -286,11 +251,11 @@ func signCSR(caCert string, caKey string, csr []byte, ip string) (cert []byte, e
 	//Load CA
 	catls, err := tls.LoadX509KeyPair(config.CaCert, config.CaKey)
 	if err != nil {
-		panic(err)
+		return []byte{}, err
 	}
 	ca, err := x509.ParseCertificate(catls.Certificate[0])
 	if err != nil {
-		panic(err)
+		return []byte{}, err
 	}
 	//Prepare certificate
 	newCert := &x509.Certificate{
@@ -309,7 +274,7 @@ func signCSR(caCert string, caKey string, csr []byte, ip string) (cert []byte, e
 	//Parse the CSR
 	clientCSR, err := x509.ParseCertificateRequest(csr)
 	if err != nil {
-		panic(err)
+		return []byte{}, err
 	}
 
 	//Sign the certificate
@@ -325,7 +290,7 @@ func callSecuredAgent(pubKey, privKey, ca []byte, method string, url string, bod
 	//Load our key pair
 	clientKeyPair, err := tls.X509KeyPair(pubKey, privKey)
 	if err != nil {
-		panic(err)
+		return []byte{}, err
 	}
 
 	//Create a new cert pool
@@ -348,11 +313,11 @@ func callSecuredAgent(pubKey, privKey, ca []byte, method string, url string, bod
 	// Still works with host-trusted CAs!
 	req, err := http.NewRequest(http.MethodPost, url, body)
 	if err != nil {
-		panic(err)
+		return []byte{}, err
 	}
 	resp, err := secureClient.Do(req)
 	if err != nil {
-		panic(err)
+		return []byte{}, err
 	}
 	reader := bufio.NewReader(resp.Body)
 	respBody, _ = ioutil.ReadAll(reader)

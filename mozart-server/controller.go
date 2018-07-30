@@ -51,11 +51,9 @@ func containerControllerExecutor(msg interface{}) bool {
 		msg := msg.(string)
 		return containerControllerStop(msg)
 	default:
-		panic("Not action available for Container Controller.")
-		//return false //This is unreachable until we fix the panic above.
+		eventError("Not action available for Container Controller.")
+		return true //Returns as true because we don't want it to run again.
 	}
-
-	//return true //This is unreachable
 }
 
 func containerControllerStart(c ContainerConfig) bool {
@@ -68,27 +66,23 @@ func containerControllerStart(c ContainerConfig) bool {
 	//Save container
 	c1, err := json.Marshal(newContainer)
 	if err != nil {
-		panic(err)
+		eventError(err)
+		return false
 	}
 	ds.Put("mozart/containers/"+newContainer.Name, c1)
-	//containers.mux.Lock()
-	////config.Containers = append(config.Containers, newContainer)
-	//containers.Containers[c.Name] = newContainer
-	//writeFile("containers", "containers.data")
-	//containers.mux.Unlock()
 
 	selectedWorker, err := selectWorker()
 	if err != nil {
-		fmt.Println("Error:", err)
+		eventError(err)
 		return false
 	}
 	newContainer.Worker = selectedWorker.AgentIP
-	//fmt.Println("Worker:", worker.AgentIP)
 
 	//Save container
 	c1, err = json.Marshal(newContainer)
 	if err != nil {
-		panic(err)
+		eventError(err)
+		return false
 	}
 	ds.Put("mozart/containers/"+newContainer.Name, c1)
 
@@ -97,19 +91,16 @@ func containerControllerStart(c ContainerConfig) bool {
 	workerBytes, _ := ds.Get("mozart/workers/" + newContainer.Worker)
 	err = json.Unmarshal(workerBytes, &worker)
 	if err != nil {
-		panic(err)
+		eventError(err)
+		return false
 	}
 	worker.Containers[newContainer.Name] = newContainer.Name
 	workerToBytes, err := json.Marshal(worker)
 	if err != nil {
-		panic(err)
+		eventError(err)
+		return false
 	}
 	ds.Put("mozart/workers/"+newContainer.Worker, workerToBytes)
-	//containers.mux.Lock()
-	////config.Containers = append(config.Containers, newContainer)
-	//containers.Containers[c.Name] = newContainer
-	//writeFile("containers", "containers.data")
-	//containers.mux.Unlock()
 
 	//Will need to add support for the worker key!!!!!
 	type CreateReq struct {
@@ -122,7 +113,7 @@ func containerControllerStart(c ContainerConfig) bool {
 	url := "https://" + newContainer.Worker + ":49433" + "/create"
 	_, err = callSecuredAgent(serverTLSCert, serverTLSKey, caTLSCert, "POST", url, b)
 	if err != nil {
-		//panic(err)
+		eventError(err)
 		return false
 	}
 
@@ -135,12 +126,14 @@ func containerControllerMove(c Container) bool {
 	workerBytes, _ := ds.Get("mozart/workers/" + c.Worker)
 	err := json.Unmarshal(workerBytes, &oldWorker)
 	if err != nil {
-		panic(err)
+		eventError(err)
+		return false
 	}
 	delete(oldWorker.Containers, c.Name)
 	workerToBytes, err := json.Marshal(oldWorker)
 	if err != nil {
-		panic(err)
+		eventError(err)
+		return false
 	}
 	ds.Put("mozart/workers/"+c.Worker, workerToBytes)
 
@@ -151,18 +144,14 @@ func containerControllerMove(c Container) bool {
 	//Save container
 	c1, err := json.Marshal(c)
 	if err != nil {
-		panic(err)
+		eventError(err)
+		return false
 	}
 	ds.Put("mozart/containers/"+c.Name, c1)
-	// containers.mux.Lock()
-	// //config.Containers = append(config.Containers, newContainer)
-	// containers.Containers[c.Name] = c
-	// writeFile("containers", "containers.data")
-	// containers.mux.Unlock()
 
 	worker, err := selectWorker()
 	if err != nil {
-		fmt.Println("Error:", err)
+		eventError(err)
 		return false
 	}
 	c.Worker = worker.AgentIP
@@ -170,28 +159,25 @@ func containerControllerMove(c Container) bool {
 	//Save container
 	c1, err = json.Marshal(c)
 	if err != nil {
-		panic(err)
+		eventError(err)
+		return false
 	}
 	ds.Put("mozart/containers/"+c.Name, c1)
 
 	//Update workers container run list
-	//var worker Worker
 	workerBytes, _ = ds.Get("mozart/workers/" + c.Worker)
 	err = json.Unmarshal(workerBytes, &worker)
 	if err != nil {
-		panic(err)
+		eventError(err)
+		return false
 	}
 	worker.Containers[c.Name] = c.Name
 	workerToBytes, err = json.Marshal(worker)
 	if err != nil {
-		panic(err)
+		eventError(err)
+		return false
 	}
 	ds.Put("mozart/workers/"+c.Worker, workerToBytes)
-	// containers.mux.Lock()
-	// //config.Containers = append(config.Containers, newContainer)
-	// containers.Containers[c.Name] = c
-	// writeFile("containers", "containers.data")
-	// containers.mux.Unlock()
 
 	//Will need to add support for the worker key!!!!!
 	type CreateReq struct {
@@ -204,7 +190,7 @@ func containerControllerMove(c Container) bool {
 	url := "https://" + c.Worker + ":49433" + "/create"
 	_, err = callSecuredAgent(serverTLSCert, serverTLSKey, caTLSCert, "POST", url, b)
 	if err != nil {
-		//panic(err)
+		eventError(err)
 		return false
 	}
 
@@ -212,26 +198,21 @@ func containerControllerMove(c Container) bool {
 }
 
 func containerControllerStop(name string) bool {
-	//Update container desired state
-	// containers.mux.Lock()
-	// container := containers.Containers[name]
-	// container.DesiredState = "stopped"
-	// containers.Containers[name] = container
-	// writeFile("containers", "containers.data")
-	// containers.mux.Unlock()
 	//Get container
 	var container Container
 	c, _ := ds.Get("mozart/containers/" + name)
 	err := json.Unmarshal(c, &container)
 	if err != nil {
-		panic(err)
+		eventError(err)
+		return false
 	}
 	//Change desired state
 	container.DesiredState = "stopped"
 	//Save new desired state
 	b2, err := json.Marshal(container)
 	if err != nil {
-		panic(err)
+		eventError(err)
+		return false
 	}
 	ds.Put("mozart/containers/"+name, b2)
 
@@ -239,7 +220,7 @@ func containerControllerStop(name string) bool {
 	url := "https://" + container.Worker + ":49433" + "/stop/" + container.Name
 	_, err = callSecuredAgent(serverTLSCert, serverTLSKey, caTLSCert, "GET", url, nil)
 	if err != nil {
-		//panic(err)
+		eventError(err)
 		return false
 	}
 
@@ -291,7 +272,8 @@ func workerControllerExecutor(msg ControllerMsg) bool {
 			//Save worker
 			w1, err := json.Marshal(worker)
 			if err != nil {
-				panic(err)
+				eventError(err)
+				return false
 			}
 			ds.Put("mozart/workers/"+worker.AgentIP, w1)
 
@@ -303,7 +285,8 @@ func workerControllerExecutor(msg ControllerMsg) bool {
 			if workerBytes != nil {
 				err = json.Unmarshal(workerBytes, &oldWorker)
 				if err != nil {
-					panic(err)
+					eventError(err)
+					return false
 				}
 			}
 			fmt.Println("The following container(s) will be moved:", oldWorker.Containers)
@@ -314,7 +297,8 @@ func workerControllerExecutor(msg ControllerMsg) bool {
 				c, _ := ds.Get("mozart/containers/" + containerName)
 				err = json.Unmarshal(c, &container)
 				if err != nil {
-					panic(err)
+					eventError(err)
+					return false
 				}
 				containerQueue <- container
 			}
@@ -325,7 +309,8 @@ func workerControllerExecutor(msg ControllerMsg) bool {
 			//Save worker
 			w1, err := json.Marshal(worker)
 			if err != nil {
-				panic(err)
+				eventError(err)
+				return false
 			}
 			ds.Put("mozart/workers/"+worker.AgentIP, w1)
 			//workers.Workers[worker.AgentIP] = worker
@@ -334,9 +319,7 @@ func workerControllerExecutor(msg ControllerMsg) bool {
 		}
 		return false
 	default:
-		panic("Not action available for Worker Controller.")
-		//return false //This is unreachable until we fix the panic above.
+		eventError("Not action available for Worker Controller.")
+		return true //Returns as true because we don't want it to run again.
 	}
-
-	//return true //This is unreachable
 }
