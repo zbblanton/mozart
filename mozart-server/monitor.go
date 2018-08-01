@@ -32,7 +32,7 @@ func monitorWorkers() {
 			//  fmt.Println("Worker " + index + " is UP.")
 			//} else {
 			if worker.Status != "reconnecting" && worker.Status != "disconnected" {
-				fmt.Println("Checking Worker " + index + ".")
+				//fmt.Println("Checking Worker " + index + ".")
 				if !checkWorkerHealth(worker.AgentIP, worker.AgentPort) {
 					fmt.Println("Worker " + index + " is DOWN.")
 					//Need to add an update state function here for mux control like we have for container state
@@ -53,7 +53,7 @@ func monitorWorkers() {
 			//fmt.Print(worker)
 		}
 		//workers.mux.Unlock()
-		fmt.Println("Waiting 10 seconds!")
+		//fmt.Println("Waiting 10 seconds!")
 		time.Sleep(time.Duration(10) * time.Second)
 	}
 	//os.Exit(1) //In case the for loop exits, stop the whole program. This is unreachable

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	//"fmt"
 	"time"
 )
 
@@ -12,7 +12,7 @@ func MonitorContainers(serverIP, agentIP string) {
 		//Loop through the containers and check the status, if not running send new state to master
 		containers.mux.Lock()
 		for _, container := range containers.Containers {
-			fmt.Println("Checking:", container)
+			//fmt.Println("Checking:", container)
 			state, err := DockerContainerStatus(container.Name)
 			if err != nil {
 				panic("Failed to get container status.")
@@ -33,7 +33,7 @@ func MonitorContainers(serverIP, agentIP string) {
 		}
 		containers.mux.Unlock()
 
-		fmt.Println("Waiting 10 seconds!")
+		//fmt.Println("Waiting 10 seconds!")
 		//time.Sleep(time.Duration(5) * time.Second)
 		<-ticker.C
 	}

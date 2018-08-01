@@ -5,13 +5,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/docker/go-connections/nat"
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"golang.org/x/net/context"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"errors"
 )
 
 //ConvertContainerConfigToDockerContainerConfig - Converts a config to a docker compatible config
@@ -68,57 +73,102 @@ func DockerCallRuntimeAPI(method string, url string, body io.Reader) (respBody [
 }
 
 //DockerCreateContainer - Creates a docker container
-func DockerCreateContainer(ContainerName string, Container DockerContainerConfig) (id string, err error) {
-	buff := new(bytes.Buffer)
-	json.NewEncoder(buff).Encode(Container)
-	url := "http://d/containers/create"
-	if ContainerName != "" {
-		url = url + "?name=" + ContainerName
+func DockerCreateContainer(ContainerName string, c ContainerConfig) (id string, err error) {
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.WithVersion("1.33"))
+	if err != nil {
+		return "", err
 	}
 
-	body, _ := DockerCallRuntimeAPI("POST", url, buff)
-
-	type ContainerCreateResp struct {
-		ID       string
-		Warnings string
-		Message  string
+	labels := make(map[string]string)
+	labels["mozart"] = "true"
+	//exposedPorts := make(map[string]struct{})
+	exposedPorts := make(nat.PortSet)
+	for _, port := range c.ExposedPorts {
+		newPort, _ := nat.NewPort("tcp", port.ContainerPort)
+		exposedPorts[newPort] = struct{}{}
 	}
-	j := ContainerCreateResp{}
-	b := bytes.NewReader(body)
-	json.NewDecoder(b).Decode(&j)
+	containerConfig := &container.Config{
+		Image: c.Image,
+		Labels: labels,
+		Env: c.Env,
+		ExposedPorts: exposedPorts,
+	}
 
-	fmt.Println("Response from Docker Runtime API:", j)
+	portBindings := make(nat.PortMap)
+	for _, port := range c.ExposedPorts {
+		p := DockerContainerHostConfigPortBindings{}
+		p.HostIP = port.HostIP
+		p.HostPort = port.HostPort
+		newPort, _ := nat.NewPort("tcp", port.HostPort)
+		portBinding := nat.PortBinding{HostIP: port.HostIP, HostPort: port.HostPort}
+		portBindings[newPort] = []nat.PortBinding{portBinding}
+	}
+	mounts := []mount.Mount{}
+	for _, m := range c.Mounts{
+		var mountType mount.Type
+		switch m.Type {
+		case "bind":
+			mountType = mount.TypeBind
+		default:
+			return "", errors.New("Mount type not supported.")
+		}
+		mounts = append(mounts, mount.Mount{Type: mountType, Source: m.Source, Target: m.Target, ReadOnly: m.ReadOnly})
+	}
+	hostConfig := &container.HostConfig{
+		PortBindings: portBindings,
+		Mounts: mounts,
+		AutoRemove: true,
+		Privileged: c.Privileged,
+	}
 
-	//ADD VERIFICATION HERE!!!!!!!!!!!!!
+	resp, err := cli.ContainerCreate(ctx, containerConfig, hostConfig, nil, ContainerName)
+	if err != nil {
+		return "", err
+	}
 
-	return j.ID, nil
+	return resp.ID, nil
 }
 
-//DockerList - List all the mozart tagged containers
-func DockerList() (containerList []string, err error) {
-	url := "http://d/containers/" + "json?filters=%7B%22label%22%3A%5B%22mozart%22%5D%7D"
-	//url := "http://d/containers/" + "json"
-	body, err := DockerCallRuntimeAPI("GET", url, nil)
+//DockerListByID - List all the mozart tagged containers by ID
+func DockerListByID() (containerList []string, err error) {
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.WithVersion("1.33"))
 	if err != nil {
-		fmt.Println("Error trying to get docker list:", err)
+		return []string{}, err
 	}
-	/*type DockerListResp struct {
-	  List []struct {
-	    ID string
-	  }
-	}*/
-	type DockerListItem struct {
-		ID string
+	labelArg := filters.Arg("label", "mozart")
+	args := filters.NewArgs(labelArg)
+	containers, err := cli.ContainerList(ctx, types.ContainerListOptions{Filters: args})
+	if err != nil {
+		return []string{}, err
 	}
-	j := []DockerListItem{}
-	b := bytes.NewReader(body)
-	json.NewDecoder(b).Decode(&j)
-	//fmt.Println(j)
-	//ADD VERIFICATION HERE!!!!!!!!!!!!!
 
-	for _, container := range j {
-		//fmt.Println("Container:", container)
+	for _, container := range containers {
 		containerList = append(containerList, container.ID)
+	}
+
+	return containerList, nil
+}
+
+//DockerListByName - List all the mozart tagged containers by Name
+func DockerListByName() (containerList []string, err error) {
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.WithVersion("1.33"))
+	if err != nil {
+		return []string{}, err
+	}
+	labelArg := filters.Arg("label", "mozart")
+	args := filters.NewArgs(labelArg)
+	containers, err := cli.ContainerList(ctx, types.ContainerListOptions{Filters: args})
+	if err != nil {
+		return []string{}, err
+	}
+
+	for _, container := range containers {
+		name := container.Names[0][1:]
+		fmt.Println(name)
+		containerList = append(containerList, name)
 	}
 
 	return containerList, nil
@@ -126,17 +176,19 @@ func DockerList() (containerList []string, err error) {
 
 //DockerGetID - Get the id of a running docker container
 func DockerGetID(ContainerName string) (ID string, err error) {
-	url := "http://d/containers/" + ContainerName + "/json"
-	body, _ := DockerCallRuntimeAPI("GET", url, nil)
-	type DockerStatusResp struct {
-		ID string
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.WithVersion("1.33"))
+	if err != nil {
+		return "", err
 	}
-	j := DockerStatusResp{}
-	b := bytes.NewReader(body)
-	json.NewDecoder(b).Decode(&j)
-	//ADD VERIFICATION HERE!!!!!!!!!!!!!
+	labelArg := filters.Arg("name", ContainerName)
+	args := filters.NewArgs(labelArg)
+	containers, err := cli.ContainerList(ctx, types.ContainerListOptions{Filters: args})
+	if err != nil || len(containers) == 0 {
+		return "", err
+	}
 
-	return j.ID, nil
+	return containers[0].ID, nil
 }
 
 //DockerPullImage - Pulls a docker image down to the host.
@@ -172,49 +224,45 @@ func DockerPullImage(imageName string) error {
 
 //DockerStartContainer - Starts a docker container
 func DockerStartContainer(ContainerID string) error {
-	url := "http://d/containers/" + ContainerID + "/start"
-	body, _ := DockerCallRuntimeAPI("POST", url, bytes.NewBuffer([]byte(`{	}`)))
-	type ContainerStartResp struct {
-		Message string
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.WithVersion("1.33"))
+	if err != nil {
+		return err
 	}
-	j := ContainerStartResp{}
-	b := bytes.NewReader(body)
-	json.NewDecoder(b).Decode(&j)
-
-	//ADD VERIFICATION HERE!!!!!!!!!!!!!
+	if err = cli.ContainerStart(ctx, ContainerID, types.ContainerStartOptions{}); err != nil {
+		return err
+	}
 
 	return nil
 }
 
 //DockerStopContainer - Stops a docker container
 func DockerStopContainer(ContainerID string) error {
-	url := "http://d/containers/" + ContainerID + "/stop"
-	body, _ := DockerCallRuntimeAPI("POST", url, bytes.NewBuffer([]byte(`{	}`)))
-	type ContainerStopResp struct {
-		Message string
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.WithVersion("1.33"))
+	if err != nil {
+		return err
 	}
-	j := ContainerStopResp{}
-	b := bytes.NewReader(body)
-	json.NewDecoder(b).Decode(&j)
-
-	//ADD VERIFICATION HERE!!!!!!!!!!!!!
+	if err = cli.ContainerStop(ctx, ContainerID, nil); err != nil {
+		return err
+	}
 
 	return nil
 }
 
 //DockerContainerStatus - Gets the status of a docker container
 func DockerContainerStatus(ContainerName string) (status string, err error) {
-	url := "http://d/containers/" + ContainerName + "/json"
-	body, _ := DockerCallRuntimeAPI("GET", url, nil)
-	type DockerStatusResp struct {
-		State struct {
-			Status string
-		}
+	ctx := context.Background()
+	cli, err := client.NewClientWithOpts(client.WithVersion("1.33"))
+	if err != nil {
+		return "", err
 	}
-	j := DockerStatusResp{}
-	b := bytes.NewReader(body)
-	json.NewDecoder(b).Decode(&j)
-	//ADD VERIFICATION HERE!!!!!!!!!!!!!
+	labelArg := filters.Arg("name", ContainerName)
+	args := filters.NewArgs(labelArg)
+	containers, err := cli.ContainerList(ctx, types.ContainerListOptions{Filters: args})
+	if err != nil || len(containers) == 0 {
+		return "", err
+	}
 
-	return j.State.Status, nil
+	return containers[0].State, nil
 }

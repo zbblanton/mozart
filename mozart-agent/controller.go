@@ -109,10 +109,10 @@ func containerControllerExecutor(msg ControllerMsg) bool {
 		containers.Containers[msg.Name] = msg
 		containers.mux.Unlock()
 		//Convert container
-		dockerContainer := ConvertContainerConfigToDockerContainerConfig(msg.Config)
+		//dockerContainer := ConvertContainerConfigToDockerContainerConfig(msg.Config)
 		fmt.Println("Need to pull down the image:", msg.Config.Image)
 		DockerPullImage(msg.Config.Image)
-		id, _ := DockerCreateContainer(msg.Name, dockerContainer)
+		id, _ := DockerCreateContainer(msg.Name, msg.Config)
 		fmt.Print(id)
 		DockerStartContainer(id)
 		containerControllerUpdateStateWithMux(msg.Name, "running", *serverPtr)
@@ -122,9 +122,9 @@ func containerControllerExecutor(msg ControllerMsg) bool {
 		//msg := msg.Data.(Container)
 		container := msg.Data.(Container)
 		//if(msg.Retries < 3){
-		dockerContainer := ConvertContainerConfigToDockerContainerConfig(container.Config)
+		//dockerContainer := ConvertContainerConfigToDockerContainerConfig(container.Config)
 		DockerPullImage(container.Config.Image)
-		id, _ := DockerCreateContainer(container.Name, dockerContainer)
+		id, _ := DockerCreateContainer(container.Name, container.Config)
 		fmt.Print(id)
 		DockerStartContainer(id)
 		containerControllerUpdateStateWithMux(container.Name, "running", *serverPtr)

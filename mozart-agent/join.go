@@ -146,7 +146,7 @@ func joinAgent(serverIP string, agentIP string, joinKey string, agentCaHash stri
 
 	err = json.Unmarshal(secureResp, &joinResp)
 	if err != nil {
-		fmt.Println("error:", err)
+		fmt.Println("Error:", err)
 	}
 	if !joinResp.Success {
 		fmt.Println("Error:", joinResp.Error)
@@ -164,7 +164,7 @@ func joinAgent(serverIP string, agentIP string, joinKey string, agentCaHash stri
 			keepRunningList = append(keepRunningList, id)
 		}
 
-		currentRunningList, _ := DockerList()
+		currentRunningList, _ := DockerListByID()
 		for _, containerID := range currentRunningList {
 			found := false
 			for _, keepRunningItem := range keepRunningList {

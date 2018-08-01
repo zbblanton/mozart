@@ -217,7 +217,7 @@ func generateCSR(privateKey *rsa.PrivateKey, IP string) (csr []byte, err error) 
 }
 
 func stopAllMozartContainers() {
-	list, err := DockerList()
+	list, err := DockerListByID()
 	if err != nil {
 		panic("Could not get list of mozart containers on host")
 	}
