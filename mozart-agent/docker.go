@@ -124,6 +124,21 @@ func DockerCreateContainer(ContainerName string, c ContainerConfig) (id string, 
 		Privileged: c.Privileged,
 	}
 
+	_, _, err = cli.ImageInspectWithRaw(ctx, c.Image)
+	if err != nil {
+		fmt.Println("Image not found locally.")
+		out, err := cli.ImagePull(ctx, c.Image, types.ImagePullOptions{})
+		if err != nil {
+			return "", errors.New("Mount type not supported.")
+		}
+		//We use bufio and readALL to force a wait on our image pull
+		fmt.Println("Pulling image if needed...")
+		reader := bufio.NewReader(out)
+		ioutil.ReadAll(reader)
+		out.Close()
+	}
+	fmt.Println("Image ready.")
+
 	resp, err := cli.ContainerCreate(ctx, containerConfig, hostConfig, nil, ContainerName)
 	if err != nil {
 		return "", err
