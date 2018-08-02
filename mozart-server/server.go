@@ -315,6 +315,7 @@ func callSecuredAgent(pubKey, privKey, ca []byte, method string, url string, bod
 	if err != nil {
 		return []byte{}, err
 	}
+	req.Header.Set("Connection", "close") //To inform the server to close connections when completed.
 	resp, err := secureClient.Do(req)
 	if err != nil {
 		return []byte{}, err
