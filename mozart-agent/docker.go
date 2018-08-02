@@ -100,7 +100,7 @@ func DockerCreateContainer(ContainerName string, c ContainerConfig) (id string, 
 		p := DockerContainerHostConfigPortBindings{}
 		p.HostIP = port.HostIP
 		p.HostPort = port.HostPort
-		newPort, _ := nat.NewPort("tcp", port.HostPort)
+		newPort, _ := nat.NewPort("tcp", port.ContainerPort)
 		portBinding := nat.PortBinding{HostIP: port.HostIP, HostPort: port.HostPort}
 		portBindings[newPort] = []nat.PortBinding{portBinding}
 	}
@@ -110,6 +110,8 @@ func DockerCreateContainer(ContainerName string, c ContainerConfig) (id string, 
 		switch m.Type {
 		case "bind":
 			mountType = mount.TypeBind
+		case "volume":
+			mountType = mount.TypeVolume
 		default:
 			return "", errors.New("Mount type not supported.")
 		}
