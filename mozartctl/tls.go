@@ -29,7 +29,7 @@ func generateSignedAgentKeyPair(){
 */
 
 //Only supports 1 IP.  No multiple hostname or IP support yet.
-func generateSignedKeyPair(caCert string, caKey string, keyPairName string, ip string) {
+func generateSignedKeyPair(caCert string, caKey string, keyPairName string, ip string, path string) {
 	// Load CA
 	catls, err := tls.LoadX509KeyPair(defaultSSLPath+caCert, defaultSSLPath+caKey)
 	if err != nil {
@@ -60,14 +60,14 @@ func generateSignedKeyPair(caCert string, caKey string, keyPairName string, ip s
 		panic(err)
 	}
 	// Public key
-	certOut, err := os.Create(defaultSSLPath + keyPairName + ".crt")
+	certOut, err := os.Create(path + keyPairName + ".crt")
 	if err != nil {
 		panic(err)
 	}
 	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: certB})
 	certOut.Close()
 	// Private key
-	keyOut, err := os.OpenFile(defaultSSLPath+keyPairName+".key", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	keyOut, err := os.OpenFile(path+keyPairName+".key", os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		panic(err)
 	}

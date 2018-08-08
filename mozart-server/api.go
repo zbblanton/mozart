@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -464,6 +465,30 @@ func WorkersListHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
+//ClusterConfigHandler - Send server config data
+func ClusterConfigHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusOK)
+	defer r.Body.Close()
+
+	type ClusterConfigResp struct {
+		Server  string
+		Ca      string
+		CaHash  string
+		JoinKey string
+		Success bool
+		Error   string
+	}
+
+	caHashBytes := sha256.Sum256(caTLSCert)
+	caHashSlice := caHashBytes[:]
+	caHash := base64.URLEncoding.EncodeToString(caHashSlice)
+	ca := string(caTLSCert)
+
+	resp := ClusterConfigResp{config.ServerIP, ca, caHash, config.AgentJoinKey, true, ""}
+	json.NewEncoder(w).Encode(resp)
+}
+
 func startAccountAndJoinServer(serverIP string, joinPort string, caCert string, serverCert string, serverKey string) {
 	router := mux.NewRouter().StrictSlash(true)
 
@@ -478,6 +503,8 @@ func startAccountAndJoinServer(serverIP string, joinPort string, caCert string, 
 	router.HandleFunc("/accounts/list", CheckAccountAuth(AccountsListHandler))
 
 	router.HandleFunc("/workers/list/", CheckAccountAuth(WorkersListHandler))
+
+	router.HandleFunc("/cluster/config", CheckAccountAuth(ClusterConfigHandler))
 
 	handler := cors.Default().Handler(router)
 
@@ -517,6 +544,8 @@ func startAPIServer(serverIP string, serverPort string, caCert string, serverCer
 	router.HandleFunc("/accounts/create", AccountsCreateHandler)
 	router.HandleFunc("/accounts/remove", RootHandler)
 	router.HandleFunc("/accounts/list", AccountsListHandler)
+
+	router.HandleFunc("/cluster/config", ClusterConfigHandler)
 
 	handler := cors.Default().Handler(router)
 

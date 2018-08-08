@@ -18,10 +18,25 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/user"
+	"errors"
+	"strconv"
 )
 
-//Config - Server and control config
+//Config - Control config
 type Config struct {
+	Server     	 string
+	AuthType   	 string
+	Account      string
+	AccessKey    string
+	SecretKey		 string
+	ClientKey    string
+	ClientCert   string
+	Ca   				 string
+}
+
+//ServerConfig - Server config
+type ServerConfig struct {
 	Name         string
 	ServerIP     string
 	ServerPort   string
@@ -32,6 +47,7 @@ type Config struct {
 	ServerCert   string
 	ServerKey    string
 }
+
 
 //Container - Container struct
 type Container struct {
@@ -87,7 +103,78 @@ type Resp struct {
 
 //taken from a google help pack
 //https://groups.google.com/forum/#!topic/golang-nuts/rmKTsGHPjlA
-func writeFile(file string, config Config) {
+
+
+func writeConfigFile(file, name string, config Config) {
+	configs := make(map[string]Config)
+	var f *os.File
+	if _, err := os.Stat(file); err == nil {
+		f, err = os.OpenFile(file, os.O_RDWR, 0644)
+		if err != nil {
+			panic("cant open file")
+		}
+
+		//Get all the current configs inside the file
+		dec := json.NewDecoder(f)
+		err := dec.Decode(&configs)
+		if err != nil {
+			panic("cant decode")
+		}
+	} else {
+		f, err = os.Create(file)
+		if err != nil {
+			panic("cant open file")
+		}
+	}
+	defer f.Close()
+
+
+	// f.Close()
+	//
+	// f, err = os.Create(file)
+	// if err != nil {
+	// 	panic("cant open file")
+	// }
+	// defer f.Close()
+
+	configs[name] = config
+
+
+	//Wipe file before writing
+	f.Truncate(0)
+  f.Seek(0,0)
+
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "    ")
+	err := enc.Encode(configs)
+	if err != nil {
+		panic("cant encode")
+	}
+}
+
+func readConfigFile(file string) Config {
+	config := make(map[string]Config)
+	f, err := os.Open(file)
+	if err != nil {
+		panic("cant open file")
+	}
+	defer f.Close()
+
+	enc := json.NewDecoder(f)
+	err = enc.Decode(&config)
+	if err != nil {
+		panic("cant decode")
+	}
+
+	//This for loop will be replaced by logic that will return the current selected cluster.
+	for _, cluster := range config {
+		return cluster
+	}
+
+	return Config{}
+}
+
+func writeServerConfigFile(file string, config ServerConfig) {
 	f, err := os.Create(file)
 	if err != nil {
 		panic("cant open file")
@@ -102,11 +189,11 @@ func writeFile(file string, config Config) {
 	}
 }
 
-func readConfigFile(file string) Config {
-	config := Config{}
+func readServerConfigFile(file string) ServerConfig {
+	config := ServerConfig{}
 	f, err := os.Open(file)
 	if err != nil {
-		panic("cant open file")
+		panic("Cant open file. Please note you may need to run sudo to access the servers config file.")
 	}
 	defer f.Close()
 
@@ -119,25 +206,124 @@ func readConfigFile(file string) Config {
 	return config
 }
 
-func callSecuredServer(pubKey, privKey, ca string, method string, url string, body io.Reader) (respBody []byte, err error) {
+func getHomeDirectory() string {
+	//Find the users home directory
+	//If needed get the user that executed sudo's name. (Note: this may not work on every system.)
+	var home string
+	currentUser, err := user.Current()
+  if err != nil {
+      log.Fatal(err)
+  }
+	//fmt.Println(currentUser.Username)
+	if currentUser.Username == "root" {
+		caller := os.Getenv("SUDO_USER")
+		if caller == "" {
+			panic("Cannot retrieve user's home directory")
+		}
+		home = "/home/" + caller + "/"
+	} else {
+		home = currentUser.HomeDir + "/"
+	}
+
+	return home
+}
+
+func callServerByCred(uri string, body io.Reader) (respBody []byte, err error) {
+	home := getHomeDirectory()
+
+	config := readConfigFile(home + ".mozart/config.json")
+	ca := config.Ca
+	//method := "POST"
+
+	//Create a new cert pool
+	rootCAs := x509.NewCertPool()
+
+	//Load CA
+	if _, err := os.Stat(ca); err == nil {
+		rootCa, err := ioutil.ReadFile(ca)
+		if err != nil {
+			panic(err)
+		}
+
+		// Append our ca cert to the system pool
+		if ok := rootCAs.AppendCertsFromPEM(rootCa); !ok {
+			log.Println("No certs appended, using system certs only")
+		}
+	} else {
+		// Append our ca cert to the system pool
+		if ok := rootCAs.AppendCertsFromPEM([]byte(ca)); !ok {
+			log.Println("No certs appended, using system certs only")
+		}
+	}
+
+	// Trust cert pool in our client
+	clientConfig := &tls.Config{
+		InsecureSkipVerify: false,
+		RootCAs:            rootCAs,
+	}
+	clientTr := &http.Transport{TLSClientConfig: clientConfig}
+	secureClient := &http.Client{Transport: clientTr}
+
+	// Still works with host-trusted CAs!
+	url := "https://" + config.Server + ":48433/" + uri
+	req, err := http.NewRequest(http.MethodPost, url, body)
+	if err != nil {
+		return respBody, err
+	}
+	req.Header.Set("Connection", "close") //To inform the server to close connections when completed.
+	req.Header.Set("Account", config.Account)
+  req.Header.Set("Access-Key", config.AccessKey)
+  req.Header.Set("Secret-Key", config.SecretKey)
+	resp, err := secureClient.Do(req)
+	if err != nil {
+		return respBody, err
+	}
+	reader := bufio.NewReader(resp.Body)
+	respBody, _ = ioutil.ReadAll(reader)
+	resp.Body.Close()
+
+	return respBody, nil
+}
+
+func callServerByKey(uri string, body io.Reader) (respBody []byte, err error) {
+	home := getHomeDirectory()
+	config := readConfigFile(home + ".mozart/config.json")
+	pubKey := config.ClientKey
+	privKey := config.ClientCert
+
+	// config := readServerConfigFile("/etc/mozart/config.json")
+	// pubKey := config.ServerCert
+	// privKey := config.ServerKey
+	//method := "POST"
+
 	//Load our key pair
 	clientKeyPair, err := tls.LoadX509KeyPair(pubKey, privKey)
 	if err != nil {
 		panic(err)
 	}
 
-	//Load CA
-	rootCa, err := ioutil.ReadFile(ca)
-	if err != nil {
-		panic(err)
-	}
+	ca := config.Ca
+	//method := "POST"
 
 	//Create a new cert pool
 	rootCAs := x509.NewCertPool()
 
-	// Append our ca cert to the system pool
-	if ok := rootCAs.AppendCertsFromPEM(rootCa); !ok {
-		log.Println("No certs appended, using system certs only")
+	//Load CA
+	if _, err := os.Stat(ca); err == nil {
+		rootCa, err := ioutil.ReadFile(ca)
+		if err != nil {
+			panic(err)
+		}
+
+		// Append our ca cert to the system pool
+		if ok := rootCAs.AppendCertsFromPEM(rootCa); !ok {
+			log.Println("No certs appended, using system certs only")
+		}
+	} else {
+		// Append our ca cert to the system pool
+		if ok := rootCAs.AppendCertsFromPEM([]byte(ca)); !ok {
+			log.Println("No certs appended, using system certs only")
+		}
 	}
 
 	// Trust cert pool in our client
@@ -150,19 +336,54 @@ func callSecuredServer(pubKey, privKey, ca string, method string, url string, bo
 	secureClient := &http.Client{Transport: clientTr}
 
 	// Still works with host-trusted CAs!
+	url := "https://" + config.Server + ":47433/" + uri
 	req, err := http.NewRequest(http.MethodPost, url, body)
 	if err != nil {
-		panic(err)
+		return respBody, err
 	}
+	req.Header.Set("Connection", "close") //To inform the server to close connections when completed.
 	resp, err := secureClient.Do(req)
 	if err != nil {
-		panic(err)
+		return respBody, err
 	}
 	reader := bufio.NewReader(resp.Body)
 	respBody, _ = ioutil.ReadAll(reader)
 	resp.Body.Close()
 
 	return respBody, nil
+}
+
+func callServer(url string, body io.Reader) (respBody []byte, err error) {
+	//Get each flag
+	//In this order of if statements
+	//Check if config file exist
+	//if not
+	//Check if Cred file exist
+	//if not
+	//Check if flags exist for server, (client private key path, client public key path) or (access key and secret key), ((CA path or CA) or insecure flag).
+
+	//depending on whats set above:
+	//callServerByKey or callServerByCred
+
+	home := getHomeDirectory()
+	fmt.Println(home)
+	if _, err := os.Stat(home + ".mozart/config.json"); err == nil {
+		config := readConfigFile(home + ".mozart/config.json")
+		if config.AuthType == "key"{
+		 	resp, err := callServerByKey(url, body)
+			return resp, err
+		} else {
+			resp, err := callServerByCred(url, body)
+			return resp, err
+		}
+	}
+
+	// if _, err := os.Stat("/etc/mozart/config.json"); err == nil {
+	// 	resp, err := callServerByKey(url, body)
+	// 	return resp, err
+	// }
+
+	return nil, errors.New("Could not find or do not have permission to open user's mozart config.")
 }
 
 func generateSha256(file string) string {
@@ -199,24 +420,44 @@ func clusterCreate(c *cli.Context) {
 		log.Fatal("Invalid IP address!")
 	}
 
+	//Get the user that executed sudo's name. (Note: this may not work on every system.)
+	user := os.Getenv("SUDO_USER")
+	uid := os.Getenv("SUDO_UID")
+	gid := os.Getenv("SUDO_GID")
+	if user == "" || uid == "" || gid == "" {
+		panic("Cannot retrieve the sudo caller's user")
+	}
+	home := "/home/" + user + "/"
+
+	//Prep folder structure
+	err := os.MkdirAll("/etc/mozart/ssl", 0755)
+	if err != nil {
+		panic(err)
+	}
+
+	err = os.MkdirAll(home + ".mozart/keys", 0755)
+	if err != nil {
+		panic(err)
+	}
+
 	fmt.Println("Creating Mozart CA...")
 	generateCaKeyPair(name + "-ca")
 	fmt.Println("Creating server keypair...")
-	generateSignedKeyPair(name+"-ca.crt", name+"-ca.key", name+"-server", server)
+	generateSignedKeyPair(name+"-ca.crt", name+"-ca.key", name+"-server", server, defaultSSLPath)
 	fmt.Println("Creating client keypair...")
-	generateSignedKeyPair(name+"-ca.crt", name+"-ca.key", name+"-client", server)
+	generateSignedKeyPair(name+"-ca.crt", name+"-ca.key", name+"-client", server, home+".mozart/keys/")
 
 	//Generate worker join key
 	randKey := make([]byte, 128)
-	_, err := rand.Read(randKey)
+	_, err = rand.Read(randKey)
 	if err != nil {
 		fmt.Println("Error generating a new worker key, we are going to exit here due to possible system errors.")
 		os.Exit(1)
 	}
 	joinKey := base64.URLEncoding.EncodeToString(randKey)
 
-	//Create config file
-	config := Config{
+	//Create server config file
+	serverConfig := ServerConfig{
 		Name:         name,
 		ServerIP:     server,
 		ServerPort:   "47433",
@@ -227,7 +468,53 @@ func clusterCreate(c *cli.Context) {
 		ServerCert:   defaultSSLPath + name + "-server.crt",
 		ServerKey:    defaultSSLPath + name + "-server.key",
 	}
-	writeFile(defaultConfigPath+name+"-config.json", config)
+	writeServerConfigFile(defaultConfigPath+"config.json", serverConfig)
+
+	//Load CA
+	ca, err := ioutil.ReadFile(defaultSSLPath + name + "-ca.crt")
+	if err != nil {
+		panic(err)
+	}
+
+	//Create config file
+	config := Config{
+		Server:     server,
+		AuthType:   "key",
+		ClientKey:  home + ".mozart/keys/" + name + "-client.crt",
+		ClientCert: home + ".mozart/keys/" + name + "-client.key",
+		Ca:         string(ca),
+	}
+	writeConfigFile(home + ".mozart/config.json", name, config)
+
+	//Set permissions to the sudo caller
+	uidInt, err := strconv.Atoi(uid)
+	if err != nil {
+		panic(err)
+	}
+	gidInt, err := strconv.Atoi(gid)
+	if err != nil {
+		panic(err)
+	}
+	err = os.Chown(home + ".mozart", uidInt, gidInt)
+	if err != nil {
+		panic(err)
+	}
+	err = os.Chown(home + ".mozart/keys", uidInt, gidInt)
+	if err != nil {
+		panic(err)
+	}
+	err = os.Chown(home+".mozart/keys/"+name+"-client.crt", uidInt, gidInt)
+	if err != nil {
+		panic(err)
+	}
+	err = os.Chown(home+".mozart/keys/"+name+"-client.key", uidInt, gidInt)
+	if err != nil {
+		panic(err)
+	}
+	err = os.Chown(home + ".mozart/config.json", uidInt, gidInt)
+	if err != nil {
+		panic(err)
+	}
 
 	//Generate hash
 	caHash := generateSha256(defaultSSLPath + name + "-ca.crt")
@@ -235,20 +522,53 @@ func clusterCreate(c *cli.Context) {
 	fmt.Printf("\n\n\n")
 	fmt.Println("Once the server has been set up, add workers by running this command:")
 	//fmt.Printf("mozart-agent --server=%s --agent=INSERT_AGENT_IP --key=%s --ca-hash=%s", server, joinKey, caHash)
-	fmt.Printf(`docker run --name mozart-agent -d --restart=always --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 49433:49433 -e "MOZART_SERVER_IP=%s" -e "MOZART_JOIN_KEY=%s" -e "MOZART_CA_HASH=%s" zbblanton/mozart-agent`, server, joinKey, caHash)
+	fmt.Printf(`docker run --name mozart-agent -d --restart=always --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 49433:49433 -e "MOZART_SERVER_IP=%s" -e "MOZART_AGENT_IP=INSERT_HOST_IP_HERE" -e "MOZART_JOIN_KEY=%s" -e "MOZART_CA_HASH=%s" zbblanton/mozart-agent`, server, joinKey, caHash)
 	fmt.Printf("\n\n\n")
 }
 
 func clusterPrint(c *cli.Context) {
-	config := readConfigFile("/etc/mozart/config.json")
+	home := getHomeDirectory()
+	if _, err := os.Stat(home+".mozart/config.json"); err == nil {
+		type ClusterConfigResp struct {
+			Server  string
+			Ca      string
+			CaHash  string
+			JoinKey string
+			Success bool
+			Error   string
+		}
+
+		var config ClusterConfigResp
+		uri := "cluster/config/"
+		resp, err := callServer(uri, nil)
+		if err != nil {
+			fmt.Println("Could not retrieve from server.")
+		} else {
+			err = json.Unmarshal(resp, &config)
+			if err != nil {
+				panic(err)
+			}
+
+			fmt.Printf("\n\n\n")
+			fmt.Println("Once the server has been set up, add workers by running this command:")
+			//fmt.Printf("mozart-agent --server=%s --agent=INSERT_AGENT_IP --key=%s --ca-hash=%s", config.ServerIP, config.AgentJoinKey, caHash)
+			fmt.Printf(`docker run --name mozart-agent -d --restart=always --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 49433:49433 -e "MOZART_SERVER_IP=%s" -e "MOZART_AGENT_IP=INSERT_HOST_IP_HERE" -e "MOZART_JOIN_KEY=%s" -e "MOZART_CA_HASH=%s" zbblanton/mozart-agent`, config.Server, config.JoinKey, config.CaHash)
+			fmt.Printf("\n\n\n")
+
+			return
+		}
+	}
+
+	fmt.Println("Trying to open server config locally.")
+	serverConfig := readServerConfigFile("/etc/mozart/config.json")
 
 	//Generate hash
-	caHash := generateSha256(config.CaCert)
+	caHash := generateSha256(serverConfig.CaCert)
 
 	fmt.Printf("\n\n\n")
 	fmt.Println("Once the server has been set up, add workers by running this command:")
 	//fmt.Printf("mozart-agent --server=%s --agent=INSERT_AGENT_IP --key=%s --ca-hash=%s", config.ServerIP, config.AgentJoinKey, caHash)
-	fmt.Printf(`docker run --name mozart-agent -d --restart=always --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 49433:49433 -e "MOZART_SERVER_IP=%s" -e "MOZART_JOIN_KEY=%s" -e "MOZART_CA_HASH=%s" zbblanton/mozart-agent`, config.ServerIP, config.AgentJoinKey, caHash)
+	fmt.Printf(`docker run --name mozart-agent -d --restart=always --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 49433:49433 -e "MOZART_SERVER_IP=%s" -e "MOZART_AGENT_IP=INSERT_HOST_IP_HERE" -e "MOZART_JOIN_KEY=%s" -e "MOZART_CA_HASH=%s" zbblanton/mozart-agent`, serverConfig.ServerIP, serverConfig.AgentJoinKey, caHash)
 	fmt.Printf("\n\n\n")
 }
 
@@ -257,9 +577,37 @@ func clusterList(c *cli.Context) {
 }
 
 func clusterCaPrint(c *cli.Context) {
-	config := readConfigFile("/etc/mozart/config.json")
+	home := getHomeDirectory()
+	if _, err := os.Stat(home+".mozart/config.json"); err == nil {
+		type ClusterConfigResp struct {
+			Server  string
+			Ca      string
+			CaHash  string
+			JoinKey string
+			Success bool
+			Error   string
+		}
+		var config ClusterConfigResp
+		uri := "cluster/config/"
+		resp, err := callServer(uri, nil)
+		if err != nil {
+			fmt.Println("Could not retrieve from server.")
+		} else {
+			err = json.Unmarshal(resp, &config)
+			if err != nil {
+				panic(err)
+			}
+
+			fmt.Println(config.Ca)
+
+			return
+		}
+	}
+
+	fmt.Println("Trying to open server config locally.")
+	serverConfig := readServerConfigFile("/etc/mozart/config.json")
 	//Load CA
-	rootCa, err := ioutil.ReadFile(defaultSSLPath + config.Name + "-ca.crt")
+	rootCa, err := ioutil.ReadFile(defaultSSLPath + serverConfig.Name + "-ca.crt")
 	if err != nil {
 		panic(err)
 	}
@@ -279,33 +627,11 @@ func serviceList(c *cli.Context) {
 }
 
 func accountsCreate(c *cli.Context) {
-	config := readConfigFile("/etc/mozart/config.json")
-
 	accountName := c.Args().First()
 	if accountName == "" {
 		fmt.Println("Must provide an account name.")
 		return
 	}
-
-	/*
-			//Generate Access Key
-			randKey := make([]byte, 16)
-		  _, err := rand.Read(randKey)
-		  if err != nil {
-		    fmt.Println("Error generating a key, we are going to exit here due to possible system errors.")
-		    os.Exit(1)
-		  }
-		  accessKey := base64.URLEncoding.EncodeToString(randKey)
-
-			//Generate Secret Key
-			randKey = make([]byte, 64)
-			_, err = rand.Read(randKey)
-			if err != nil {
-				fmt.Println("Error generating a key, we are going to exit here due to possible system errors.")
-				os.Exit(1)
-			}
-			secretKey := base64.URLEncoding.EncodeToString(randKey)
-	*/
 
 	newAccount := Account{
 		Type: "service",
@@ -313,8 +639,8 @@ func accountsCreate(c *cli.Context) {
 
 	b := new(bytes.Buffer)
 	json.NewEncoder(b).Encode(newAccount)
-	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/accounts/create"
-	resp, err := callSecuredServer(defaultSSLPath+config.Name+"-client.crt", defaultSSLPath+config.Name+"-client.key", defaultSSLPath+config.Name+"-ca.crt", "POST", url, b)
+	uri := "accounts/create"
+	resp, err := callServer(uri, b)
 	if err != nil {
 		panic(err)
 	}
@@ -342,10 +668,8 @@ func accountsCreate(c *cli.Context) {
 }
 
 func accountsList(c *cli.Context) {
-	config := readConfigFile("/etc/mozart/config.json")
-
-	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/accounts/list"
-	resp, err := callSecuredServer(defaultSSLPath+config.Name+"-client.crt", defaultSSLPath+config.Name+"-client.key", defaultSSLPath+config.Name+"-ca.crt", "GET", url, nil)
+	uri := "accounts/list"
+	resp, err := callServer(uri, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -369,8 +693,6 @@ func accountsList(c *cli.Context) {
 }
 
 func containerRun(c *cli.Context) {
-	config := readConfigFile("/etc/mozart/config.json")
-
 	//configPath := c.String("config")
 	configPath := c.Args().First()
 	if configPath == "" {
@@ -385,8 +707,8 @@ func containerRun(c *cli.Context) {
 
 	configReader := bufio.NewReader(f)
 
-	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/containers/create"
-	resp, err := callSecuredServer(defaultSSLPath+config.Name+"-client.crt", defaultSSLPath+config.Name+"-client.key", defaultSSLPath+config.Name+"-ca.crt", "POST", url, configReader)
+	uri := "containers/create"
+	resp, err := callServer(uri, configReader)
 	if err != nil {
 		panic(err)
 	}
@@ -403,14 +725,12 @@ func containerRun(c *cli.Context) {
 }
 
 func containerStop(c *cli.Context) {
-	config := readConfigFile("/etc/mozart/config.json")
-
 	if c.Args().First() == "" {
 		panic("Must provide the name or id of the container.")
 	}
 
-	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/containers/stop/" + c.Args().First()
-	resp, err := callSecuredServer(defaultSSLPath+config.Name+"-client.crt", defaultSSLPath+config.Name+"-client.key", defaultSSLPath+config.Name+"-ca.crt", "GET", url, nil)
+	uri := "containers/stop/" + c.Args().First()
+	resp, err := callServer(uri, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -427,10 +747,8 @@ func containerStop(c *cli.Context) {
 }
 
 func containerList(c *cli.Context) {
-	config := readConfigFile("/etc/mozart/config.json")
-
-	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/containers/list"
-	resp, err := callSecuredServer(defaultSSLPath+config.Name+"-client.crt", defaultSSLPath+config.Name+"-client.key", defaultSSLPath+config.Name+"-ca.crt", "GET", url, nil)
+	uri := "containers/list"
+	resp, err := callServer(uri, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -454,10 +772,8 @@ func containerList(c *cli.Context) {
 }
 
 func workersList(c *cli.Context) {
-	config := readConfigFile("/etc/mozart/config.json")
-
-	url := "https://" + config.ServerIP + ":" + config.ServerPort + "/workers/list"
-	resp, err := callSecuredServer(defaultSSLPath+config.Name+"-client.crt", defaultSSLPath+config.Name+"-client.key", defaultSSLPath+config.Name+"-ca.crt", "GET", url, nil)
+	uri := "workers/list"
+	resp, err := callServer(uri, nil)
 	if err != nil {
 		panic(err)
 	}

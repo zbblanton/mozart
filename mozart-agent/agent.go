@@ -147,6 +147,7 @@ func callInsecuredServer(method string, url string, body io.Reader) (respBody []
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("Connection", "close") //To inform the server to close connections when completed.
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -188,6 +189,7 @@ func callSecuredServer(pubKey, privKey, ca []byte, method string, url string, bo
 	if err != nil {
 		panic(err)
 	}
+	req.Header.Set("Connection", "close") //To inform the server to close connections when completed.
 	resp, err := secureClient.Do(req)
 	if err != nil {
 		panic(err)
