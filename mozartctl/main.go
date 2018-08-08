@@ -600,7 +600,26 @@ func clusterPrint(c *cli.Context) {
 }
 
 func clusterList(c *cli.Context) {
-	fmt.Println("Feature not yet implemented.")
+	var config UserConfigs
+	home := getHomeDirectory()
+	f, err := os.Open(home + ".mozart/config.json")
+	if err != nil {
+		panic("cant open file")
+	}
+	defer f.Close()
+
+	enc := json.NewDecoder(f)
+	err = enc.Decode(&config)
+	if err != nil {
+		panic("cant decode")
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"Cluster Name", "Server", "Authentication Type"})
+	for name, c := range config.Configs {
+		table.Append([]string{name, c.Server, c.AuthType})
+	}
+	table.Render() // Send output
 }
 
 func clusterCaPrint(c *cli.Context) {
