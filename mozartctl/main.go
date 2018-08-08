@@ -417,19 +417,19 @@ func clusterSwitch(c *cli.Context) {
 	if err != nil {
 		panic("cant open file")
 	}
-	defer f.Close()
-
 	enc := json.NewDecoder(f)
 	err = enc.Decode(&config)
 	if err != nil {
 		panic("cant decode")
 	}
+	f.Close()
 
 	if _, ok := config.Configs[switchTo]; !ok {
 		fmt.Println("Could not find cluster in the user config file.")
 		return
 	}
 	writeConfigFile(home + ".mozart/config.json", switchTo, Config{}, true)
+	fmt.Println("Switched cluster from", config.Selected, "to", switchTo)
 }
 
 func clusterCreate(c *cli.Context) {
@@ -615,9 +615,13 @@ func clusterList(c *cli.Context) {
 	}
 
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Cluster Name", "Server", "Authentication Type"})
+	table.SetHeader([]string{"Cluster Name", "Server", "Authentication Type", "Selected"})
 	for name, c := range config.Configs {
-		table.Append([]string{name, c.Server, c.AuthType})
+		if(name == config.Selected){
+			table.Append([]string{name, c.Server, c.AuthType, "*"})
+		} else {
+			table.Append([]string{name, c.Server, c.AuthType, ""})
+		}
 	}
 	table.Render() // Send output
 }
