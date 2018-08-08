@@ -24,6 +24,11 @@ import (
 )
 
 //Config - Control config
+type UserConfigs struct {
+	Selected string
+	Configs  map[string]Config
+}
+
 type Config struct {
 	Server     	 string
 	AuthType   	 string
@@ -105,8 +110,11 @@ type Resp struct {
 //https://groups.google.com/forum/#!topic/golang-nuts/rmKTsGHPjlA
 
 
-func writeConfigFile(file, name string, config Config) {
-	configs := make(map[string]Config)
+func writeConfigFile(file, name string, newConfig Config, onlyChangeSelected bool) {
+	config := UserConfigs{
+		Configs: make(map[string]Config),
+	}
+	//configs := make(map[string]Config)
 	var f *os.File
 	if _, err := os.Stat(file); err == nil {
 		f, err = os.OpenFile(file, os.O_RDWR, 0644)
@@ -116,7 +124,7 @@ func writeConfigFile(file, name string, config Config) {
 
 		//Get all the current configs inside the file
 		dec := json.NewDecoder(f)
-		err := dec.Decode(&configs)
+		err := dec.Decode(&config)
 		if err != nil {
 			panic("cant decode")
 		}
@@ -128,17 +136,10 @@ func writeConfigFile(file, name string, config Config) {
 	}
 	defer f.Close()
 
-
-	// f.Close()
-	//
-	// f, err = os.Create(file)
-	// if err != nil {
-	// 	panic("cant open file")
-	// }
-	// defer f.Close()
-
-	configs[name] = config
-
+	config.Selected = name
+	if !onlyChangeSelected {
+		config.Configs[name] = newConfig
+	}
 
 	//Wipe file before writing
 	f.Truncate(0)
@@ -146,14 +147,17 @@ func writeConfigFile(file, name string, config Config) {
 
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "    ")
-	err := enc.Encode(configs)
+	err := enc.Encode(config)
 	if err != nil {
 		panic("cant encode")
 	}
 }
 
 func readConfigFile(file string) Config {
-	config := make(map[string]Config)
+	config := UserConfigs{
+		Configs: make(map[string]Config),
+	}
+	//config := make(map[string]Config)
 	f, err := os.Open(file)
 	if err != nil {
 		panic("cant open file")
@@ -166,12 +170,11 @@ func readConfigFile(file string) Config {
 		panic("cant decode")
 	}
 
-	//This for loop will be replaced by logic that will return the current selected cluster.
-	for _, cluster := range config {
-		return cluster
+	if _, ok := config.Configs[config.Selected]; !ok {
+		panic("Could not find the selected cluster in the config file.")
 	}
 
-	return Config{}
+	return config.Configs[config.Selected]
 }
 
 func writeServerConfigFile(file string, config ServerConfig) {
@@ -402,7 +405,31 @@ func generateSha256(file string) string {
 }
 
 func clusterSwitch(c *cli.Context) {
-	fmt.Println("Feature not yet implemented.")
+	switchTo := c.Args().First()
+	if switchTo == "" {
+		fmt.Println("Must provide a cluster name.")
+		return
+	}
+
+	var config UserConfigs
+	home := getHomeDirectory()
+	f, err := os.Open(home + ".mozart/config.json")
+	if err != nil {
+		panic("cant open file")
+	}
+	defer f.Close()
+
+	enc := json.NewDecoder(f)
+	err = enc.Decode(&config)
+	if err != nil {
+		panic("cant decode")
+	}
+
+	if _, ok := config.Configs[switchTo]; !ok {
+		fmt.Println("Could not find cluster in the user config file.")
+		return
+	}
+	writeConfigFile(home + ".mozart/config.json", switchTo, Config{}, true)
 }
 
 func clusterCreate(c *cli.Context) {
@@ -484,7 +511,7 @@ func clusterCreate(c *cli.Context) {
 		ClientCert: home + ".mozart/keys/" + name + "-client.key",
 		Ca:         string(ca),
 	}
-	writeConfigFile(home + ".mozart/config.json", name, config)
+	writeConfigFile(home + ".mozart/config.json", name, config, false)
 
 	//Set permissions to the sudo caller
 	uidInt, err := strconv.Atoi(uid)
