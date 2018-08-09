@@ -6,20 +6,20 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/json"
-	"encoding/pem"
+	"encoding/base64"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
-	"math/big"
-	"net"
 	"net/http"
 	"os"
+	"os/user"
 	"sync"
 	"time"
+	"strconv"
+	"path/filepath"
 )
 
 //Container holds data for one container
@@ -63,20 +63,50 @@ type Containers struct {
 	mux        sync.Mutex
 }
 
-//Config data for server
-type Config struct {
-	Name              string
-	ServerIP          string
-	ServerPort        string
-	AgentPort         string
-	AgentJoinKey      string
-	CaCert            string
-	CaKey             string
-	ServerCert        string
-	ServerKey         string
-	TempCurrentWorker uint
-	mux               sync.Mutex
+//Config - Control config
+type UserConfigs struct {
+	Selected string
+	Configs  map[string]Config
 }
+
+type Config struct {
+	Server     	 string
+	AuthType   	 string
+	Account      string
+	AccessKey    string
+	SecretKey		 string
+	ClientKey    string
+	ClientCert   string
+	Ca   				 string
+}
+
+//ServerConfig - Server config
+type ServerConfig struct {
+	Name         string
+	ServerIP     string
+	ServerPort   string
+	AgentPort    string
+	AgentJoinKey string
+	CaCert       string
+	CaKey        string
+	ServerCert   string
+	ServerKey    string
+	mux          sync.Mutex
+}
+
+// //Config data for server
+// type Config struct {
+// 	Name              string
+// 	ServerIP          string
+// 	ServerPort        string
+// 	AgentPort         string
+// 	AgentJoinKey      string
+// 	CaCert            string
+// 	CaKey             string
+// 	ServerCert        string
+// 	ServerKey         string
+// 	TempCurrentWorker uint
+// }
 
 //ExposedPort holds an exposed port for a container
 type ExposedPort struct {
@@ -183,10 +213,10 @@ type Resp struct {
 	Error   string `json:"error"`
 }
 
-var ds = &FileDataStore{Path: "mozart.db"}
+var ds = &FileDataStore{Path: "/var/lib/mozart/mozart.db"}
 var counter = 1
 var defaultConfigPath = "/etc/mozart/"
-var config = Config{}
+var config = ServerConfig{}
 var workerQueue = make(chan ControllerMsg, 3)
 var workerRetryQueue = make(chan ControllerMsg, 3)
 var containerQueue = make(chan interface{}, 3)
@@ -194,8 +224,27 @@ var containerRetryQueue = make(chan interface{}, 3)
 var serverTLSCert = []byte{}
 var serverTLSKey = []byte{}
 var caTLSCert = []byte{}
+var defaultSSLPath = "/etc/mozart/ssl/"
 
-func readConfigFile(file string) {
+// func readConfigFile(file string) {
+// 	f, err := os.Open(file)
+// 	if err != nil {
+// 		panic("cant open file")
+// 	}
+// 	defer f.Close()
+//
+// 	enc := json.NewDecoder(f)
+// 	err = enc.Decode(&config)
+// 	if err != nil {
+// 		panic("cant decode")
+// 	}
+// }
+
+func readConfigFile(file string) Config {
+	config := UserConfigs{
+		Configs: make(map[string]Config),
+	}
+	//config := make(map[string]Config)
 	f, err := os.Open(file)
 	if err != nil {
 		panic("cant open file")
@@ -206,6 +255,87 @@ func readConfigFile(file string) {
 	err = enc.Decode(&config)
 	if err != nil {
 		panic("cant decode")
+	}
+
+	if _, ok := config.Configs[config.Selected]; !ok {
+		panic("Could not find the selected cluster in the config file.")
+	}
+
+	return config.Configs[config.Selected]
+}
+
+func writeConfigFile(file, name string, newConfig Config, onlyChangeSelected bool) {
+	config := UserConfigs{
+		Configs: make(map[string]Config),
+	}
+	//configs := make(map[string]Config)
+	var f *os.File
+	if _, err := os.Stat(file); err == nil {
+		f, err = os.OpenFile(file, os.O_RDWR, 0644)
+		if err != nil {
+			panic("cant open file")
+		}
+
+		//Get all the current configs inside the file
+		dec := json.NewDecoder(f)
+		err := dec.Decode(&config)
+		if err != nil {
+			panic("cant decode")
+		}
+	} else {
+		f, err = os.Create(file)
+		if err != nil {
+			panic("cant open file")
+		}
+	}
+	defer f.Close()
+
+	config.Selected = name
+	if !onlyChangeSelected {
+		config.Configs[name] = newConfig
+	}
+
+	//Wipe file before writing
+	f.Truncate(0)
+  f.Seek(0,0)
+
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "    ")
+	err := enc.Encode(config)
+	if err != nil {
+		panic("cant encode")
+	}
+}
+
+func readServerConfigFile(file string) ServerConfig {
+	config := ServerConfig{}
+	f, err := os.Open(file)
+	if err != nil {
+		panic("Cant open file. Please note you may need to run sudo to access the servers config file.")
+	}
+	defer f.Close()
+
+	enc := json.NewDecoder(f)
+	err = enc.Decode(&config)
+	if err != nil {
+		panic("cant decode")
+	}
+
+	return config
+}
+
+func writeServerConfigFile(file string, config ServerConfig) {
+	f, err := os.Create(file)
+	if err != nil {
+		panic("cant open file")
+	}
+	defer f.Close()
+
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "    ")
+	err = enc.Encode(config)
+	if err != nil {
+		panic("cant encode")
 	}
 }
 
@@ -246,44 +376,182 @@ func checkWorkerHealth(workerIP string, workerPort string) bool {
 	return true
 }
 
-//Only supports 1 IP.  No multiple hostname or IP support yet.
-func signCSR(caCert string, caKey string, csr []byte, ip string) (cert []byte, err error) {
+func createUserAccount(name string) Account{
+	j := Account{
+		Type: "user",
+		Name: name,
+		Description: "Default user account generated during install.",
+	}
+
+	//Generate Access Key
+	randKey := make([]byte, 16)
+	_, err := rand.Read(randKey)
+	if err != nil {
+		fmt.Println("Error generating a key, we are going to exit here due to possible system errors.")
+		os.Exit(1)
+	}
+	j.AccessKey = base64.URLEncoding.EncodeToString(randKey)
+
+	//Generate Secret Key
+	randKey = make([]byte, 64)
+	_, err = rand.Read(randKey)
+	if err != nil {
+		fmt.Println("Error generating a key, we are going to exit here due to possible system errors.")
+		os.Exit(1)
+	}
+	j.SecretKey = base64.URLEncoding.EncodeToString(randKey)
+
+	//Save account
+	accountBytes, err := json.Marshal(j)
+	if err != nil {
+		eventFatal(err)
+		return Account{}
+	}
+	ds.Put("mozart/accounts/"+"mozart", accountBytes)
+
+	return j
+}
+
+func getHomeDirectory() string {
+	//Find the users home directory
+	//If needed get the user that executed sudo's name. (Note: this may not work on every system.)
+	var home string
+	currentUser, err := user.Current()
+  if err != nil {
+      log.Fatal(err)
+  }
+	//fmt.Println(currentUser.Username)
+	if currentUser.Username == "root" {
+		caller := os.Getenv("SUDO_USER")
+		if caller != "" {
+			home = "/home/" + caller + "/"
+		}
+	} else {
+		home = currentUser.HomeDir + "/"
+	}
+
+	return home
+}
+
+func installServer(server string){
+	name := "mozart"
+
+	//Get the user that executed sudo's name. (Note: this may not work on every system.)
+	user, _ := user.Current()
+	uid := user.Uid
+	gid := user.Uid
+	if uid == "" || gid == "" {
+		panic("Cannot get user account info.")
+	}
+	home := getHomeDirectory()
+
+	//Prep folder structure
+	err := os.MkdirAll("/etc/mozart/ssl", 0755)
+	if err != nil {
+		panic(err)
+	}
+
+	err = os.MkdirAll(home + ".mozart/keys", 0755)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("Creating Mozart CA...")
+	generateCaKeyPair(name + "-ca")
+	fmt.Println("Creating server keypair...")
+	generateSignedKeyPair(name+"-ca.crt", name+"-ca.key", name+"-server", server, defaultSSLPath)
+
+	//Generate worker join key
+	randKey := make([]byte, 128)
+	_, err = rand.Read(randKey)
+	if err != nil {
+		fmt.Println("Error generating a new worker key, we are going to exit here due to possible system errors.")
+		os.Exit(1)
+	}
+	joinKey := base64.URLEncoding.EncodeToString(randKey)
+
+	//Create server config file
+	serverConfig := ServerConfig{
+		Name:         name,
+		ServerIP:     server,
+		ServerPort:   "47433",
+		AgentPort:    "49433",
+		AgentJoinKey: joinKey,
+		CaCert:       defaultSSLPath + name + "-ca.crt",
+		CaKey:        defaultSSLPath + name + "-ca.key",
+		ServerCert:   defaultSSLPath + name + "-server.crt",
+		ServerKey:    defaultSSLPath + name + "-server.key",
+	}
+	writeServerConfigFile(defaultConfigPath+"config.json", serverConfig)
+
 	//Load CA
-	catls, err := tls.LoadX509KeyPair(config.CaCert, config.CaKey)
+	ca, err := ioutil.ReadFile(defaultSSLPath + name + "-ca.crt")
 	if err != nil {
-		return []byte{}, err
+		panic(err)
 	}
-	ca, err := x509.ParseCertificate(catls.Certificate[0])
+
+	//Create a user
+	userAccount := createUserAccount("mozart")
+
+	//Create config file
+	config := Config{
+		Server:    server,
+		AuthType:  "cred",
+		Account:   userAccount.Name,
+		AccessKey: userAccount.AccessKey,
+		SecretKey: userAccount.SecretKey,
+		Ca:        string(ca),
+	}
+	writeConfigFile(home + ".mozart/config.json", name, config, false)
+
+	//Set permissions to the sudo caller
+	uidInt, err := strconv.Atoi(uid)
 	if err != nil {
-		return []byte{}, err
+		panic(err)
 	}
-	//Prepare certificate
-	newCert := &x509.Certificate{
-		SerialNumber: big.NewInt(1658),
-		Subject: pkix.Name{
-			Organization: []string{"Mozart"},
-		},
-		NotBefore:    time.Now(),
-		NotAfter:     time.Now().AddDate(10, 0, 0),
-		SubjectKeyId: []byte{1, 2, 3, 4, 6},
-		IPAddresses:  []net.IP{net.ParseIP(ip)},
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-	}
-
-	//Parse the CSR
-	clientCSR, err := x509.ParseCertificateRequest(csr)
+	gidInt, err := strconv.Atoi(gid)
 	if err != nil {
-		return []byte{}, err
+		panic(err)
+	}
+	err = os.Chown(home + ".mozart", uidInt, gidInt)
+	if err != nil {
+		panic(err)
+	}
+	err = os.Chown(home + ".mozart/keys", uidInt, gidInt)
+	if err != nil {
+		panic(err)
+	}
+	err = os.Chown(home + ".mozart/config.json", uidInt, gidInt)
+	if err != nil {
+		panic(err)
 	}
 
-	//Sign the certificate
-	certSigned, err := x509.CreateCertificate(rand.Reader, newCert, ca, clientCSR.PublicKey, catls.PrivateKey)
+	err = os.Chown("/etc/mozart", uidInt, gidInt)
+	if err != nil {
+		panic(err)
+	}
 
-	//Public key
-	cert = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certSigned})
+	searchDir := "/etc/mozart"
+	fileList := make([]string, 0)
+	err = filepath.Walk(searchDir, func(path string, f os.FileInfo, err error) error {
+		fileList = append(fileList, path)
+		return err
+	})
+	if err != nil {
+		panic(err)
+	}
 
-	return cert, nil
+	for _, file := range fileList {
+		err = os.Chown(file, uidInt, gidInt)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	// err = os.Chown(home + "/etc/mozart/config.json", uidInt, gidInt)
+	// if err != nil {
+	// 	panic(err)
+	// }
 }
 
 func callSecuredAgent(pubKey, privKey, ca []byte, method string, url string, body io.Reader) (respBody []byte, err error) {
@@ -328,21 +596,37 @@ func callSecuredAgent(pubKey, privKey, ca []byte, method string, url string, bod
 }
 
 func main() {
+	err := os.MkdirAll("/var/lib/mozart/", 0700)
+	if err != nil {
+		panic(err)
+	}
 	ds.Init()
 	defer ds.Close()
 
-	configPtr := flag.String("config", "", "Path to config file. (Default: /etc/mozart/config.json)")
+
+
+	//configPtr := flag.String("config", "", "Path to config file. (Default: /etc/mozart/config.json)")
+	serverPtr := flag.String("server", "", "IP address for server.")
 	flag.Parse()
 	//Make sure server flag is given.
-	if *configPtr == "" {
-		readConfigFile("/etc/mozart/config.json")
-	} else {
-		readConfigFile(*configPtr)
+	// if *configPtr == "" {
+	// 	readServerConfigFile("/etc/mozart/config.json")
+	// } else {
+	// 	readServerConfigFile(*configPtr)
+	// }
+
+	//Check if server config exist, if not, run the install.
+	if _, err = os.Stat("/etc/mozart/config.json"); err != nil {
+		if *serverPtr == "" {
+			eventFatal("Must provide a server IP.")
+		}
+		installServer(*serverPtr)
 	}
+
+	config = readServerConfigFile("/etc/mozart/config.json")
 
 	//Load Certs into memory
 	//err := errors.New("")
-	var err error
 	serverTLSCert, err = ioutil.ReadFile(config.ServerCert)
 	if err != nil {
 		panic(err)
