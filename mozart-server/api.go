@@ -510,11 +510,11 @@ func startAccountAndJoinServer(serverIP string, joinPort string, caCert string, 
 
 	//Setup server config
 	server := &http.Server{
-		Addr:    serverIP + ":" + joinPort,
+		//Addr:    serverIP + ":" + joinPort,
+		Addr:    ":" + joinPort,
 		Handler: handler}
 
 	//Start Join server
-	fmt.Println("Starting join server...")
 	err := server.ListenAndServeTLS(serverCert, serverKey)
 	log.Fatal(err)
 }
@@ -565,7 +565,8 @@ func startAPIServer(serverIP string, serverPort string, caCert string, serverCer
 
 	//Setup server config
 	server := &http.Server{
-		Addr:      serverIP + ":" + serverPort,
+		//Addr:      serverIP + ":" + serverPort,
+		Addr:      ":" + serverPort,
 		Handler:   handler,
 		TLSConfig: tlsCfg}
 
