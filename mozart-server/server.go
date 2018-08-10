@@ -618,7 +618,11 @@ func main() {
 	//Check if server config exist, if not, run the install.
 	if _, err = os.Stat("/etc/mozart/config.json"); err != nil {
 		if *serverPtr == "" {
-			eventFatal("Must provide a server IP.")
+			if env := os.Getenv("MOZART_SERVER_IP"); env == "" {
+				log.Fatal("Must provide this server's IP.")
+			} else {
+				serverPtr = &env
+			}
 		}
 		installServer(*serverPtr)
 	}
