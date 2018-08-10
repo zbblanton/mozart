@@ -1,12 +1,18 @@
-#!/bin/sh
-#Copy binary to bin
-cp mozartctl /usr/local/bin
-chmod 755 /usr/local/bin/mozartctl
+#!/bin/bash
 
-#Add path to system wide profile
-echo 'export PATH=$PATH:/usr/local/bin' >> /etc/profile
+if [ "$EUID" -ne 0 ]
+  then echo "Please run this script as root to install correctly."
+  exit
+fi
 
-#Create directories
-#mkdir -p /etc/mozart/ssl/
-#mkdir -p /var/lib/mozart/
-
+if [[ "$OSTYPE" == "linux-gnu" ]]; then
+  [[ ":$PATH:" != *":/usr/local/bin:"* ]] && echo 'export PATH=$PATH:/usr/local/bin' >> /etc/profile
+  cp mozartctl /usr/local/bin
+  chmod 755 /usr/local/bin/mozartctl
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+  [[ ":$PATH:" != *":/usr/local/bin:"* ]] && echo 'export PATH=$PATH:/usr/local/bin' >> /etc/bashrc
+  cp mozartctl /usr/local/bin
+  chmod 755 /usr/local/bin/mozartctl
+else
+  echo "Cannot detect OS."
+fi
