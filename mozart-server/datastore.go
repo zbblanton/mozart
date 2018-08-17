@@ -3,8 +3,12 @@ package main
 import (
 	//"fmt"
 	"bytes"
+	//"context"
+	"golang.org/x/net/context"
+	"time"
 
 	"github.com/boltdb/bolt"
+	"github.com/coreos/etcd/clientv3"
 )
 
 //DataStore - Default datastore interface
@@ -148,6 +152,95 @@ func (f *FileDataStore) ifExist(key string) (exist bool, err error) {
 }
 
 //End File Datastore
+
+
+
+
+//EtcdDataStore - Etcd Datastore
+type EtcdDataStore struct {
+	endpoints []string
+  cli       *clientv3.Client
+  ctx       context.Context
+  cancel    func()
+}
+
+///Init - Initialize file based datastore
+func (e *EtcdDataStore) Init() {
+  var err error
+  e.cli, err = clientv3.New(clientv3.Config{
+    Endpoints:   e.endpoints,
+    DialTimeout: 2 * time.Second,
+  })
+  if err != nil {
+      panic(err)
+  }
+
+  //e.ctx, e.cancel = context.WithTimeout(context.Background(), 10 * time.Second)
+	e.ctx, e.cancel = context.WithCancel(context.Background())
+}
+
+//Close - Close etcd datastore
+func (e *EtcdDataStore) Close() {
+  e.cancel()
+}
+
+//Get -
+func (e *EtcdDataStore) Get(key string) (val []byte, err error) {
+  resp, err := e.cli.Get(e.ctx, key)
+  if err != nil {
+      return nil, err
+  }
+  for _, kv := range resp.Kvs {
+    return kv.Value, nil
+  }
+
+  return nil, nil
+}
+
+//Get -
+func (e *EtcdDataStore) GetByPrefix(prefix string) (kv map[string][]byte, err error) {
+  kv = make(map[string][]byte)
+
+  resp, err := e.cli.Get(e.ctx, prefix, clientv3.WithPrefix())
+  if err != nil {
+      return kv, err
+  }
+  for _, i := range resp.Kvs {
+    kv[string(i.Key)] = i.Value
+  }
+
+  return kv, nil
+}
+
+//ifExist - Check if key exist in datastore
+func (e *EtcdDataStore) ifExist(key string) (exist bool, err error) {
+  resp, err := e.cli.Get(e.ctx, key)
+  if err != nil {
+      return false, err
+  }
+  for _, _ = range resp.Kvs {
+    return true, nil
+  }
+
+  return false, err
+}
+
+func (e *EtcdDataStore) Put(key string, val []byte) error {
+  _, err := e.cli.Put(e.ctx, key, string(val))
+  if err != nil {
+      return err
+  }
+  return err
+}
+
+func (e *EtcdDataStore) Del(key string) error {
+  _, err := e.cli.Delete(e.ctx, key)
+  if err != nil {
+      return err
+  }
+  return err
+}
+
 
 /*
 //Redis Datastore

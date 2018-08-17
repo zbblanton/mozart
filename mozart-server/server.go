@@ -213,7 +213,8 @@ type Resp struct {
 	Error   string `json:"error"`
 }
 
-var ds = &FileDataStore{Path: "/var/lib/mozart/mozart.db"}
+//var ds = &FileDataStore{Path: "/var/lib/mozart/mozart.db"}
+var ds = &EtcdDataStore{endpoints: []string{"192.168.0.45:2379"}}
 var counter = 1
 var defaultConfigPath = "/etc/mozart/"
 var config = ServerConfig{}

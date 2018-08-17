@@ -369,7 +369,7 @@ func callServer(url string, body io.Reader) (respBody []byte, err error) {
 	//callServerByKey or callServerByCred
 
 	home := getHomeDirectory()
-	fmt.Println(home)
+	//fmt.Println(home)
 	if _, err := os.Stat(home + ".mozart/config.json"); err == nil {
 		config := readConfigFile(home + ".mozart/config.json")
 		if config.AuthType == "key"{
