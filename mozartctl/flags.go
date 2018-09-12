@@ -15,6 +15,11 @@ var (
 		Usage: "Address of the Mozart server.",
 	}
 
+	flagClusterServers = cli.StringFlag{
+		Name:  "servers",
+		Usage: "Addresses of each Mozart server separted by a comma. (Multi-Master mode).",
+	}
+
 	flagRunConfig = cli.StringFlag{
 		Name:  "config",
 		Usage: "Container config file.",

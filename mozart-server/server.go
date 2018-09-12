@@ -20,6 +20,7 @@ import (
 	"time"
 	"strconv"
 	"path/filepath"
+	"strings"
 )
 
 //Container holds data for one container
@@ -85,6 +86,7 @@ type ServerConfig struct {
 	Name         string
 	ServerIP     string
 	ServerPort   string
+	Servers			 []string
 	AgentPort    string
 	AgentJoinKey string
 	CaCert       string
@@ -134,10 +136,10 @@ type ContainerConfig struct {
 	Privileged   bool
 }
 
-//NodeInitialJoinReq - Initial node join request
-type NodeInitialJoinReq struct {
-	AgentIP   string
-	AgentPort string
+//InitialJoinReq - Initial node join request
+type InitialJoinReq struct {
+	IP   string
+	Port string
 	JoinKey   string
 	Csr       string
 }
@@ -207,14 +209,21 @@ type ControllerReconnectMsg struct {
 	disconnectTime time.Time
 }
 
+//StateUpdateReq - Update container state
+type StateUpdateReq struct {
+	Key           string
+	ContainerName string
+	State         string
+}
+
 //Resp - Generic response
 type Resp struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error"`
 }
 
-//var ds = &FileDataStore{Path: "/var/lib/mozart/mozart.db"}
-var ds = &EtcdDataStore{endpoints: []string{"192.168.0.45:2379"}}
+var ds = &FileDataStore{Path: "/var/lib/mozart/mozart.db"}
+//var ds = &EtcdDataStore{endpoints: []string{"192.168.0.45:2379"}}
 var counter = 1
 var defaultConfigPath = "/etc/mozart/"
 var config = ServerConfig{}
@@ -226,6 +235,7 @@ var serverTLSCert = []byte{}
 var serverTLSKey = []byte{}
 var caTLSCert = []byte{}
 var defaultSSLPath = "/etc/mozart/ssl/"
+var master = MasterInfo{candidate: false}
 
 // func readConfigFile(file string) {
 // 	f, err := os.Open(file)
@@ -459,8 +469,8 @@ func installServer(server string){
 
 	fmt.Println("Creating Mozart CA...")
 	generateCaKeyPair(name + "-ca")
-	fmt.Println("Creating server keypair...")
-	generateSignedKeyPair(name+"-ca.crt", name+"-ca.key", name+"-server", server, defaultSSLPath)
+	// fmt.Println("Creating server keypair...")
+	// generateSignedKeyPair(name+"-ca.crt", name+"-ca.key", name+"-server", server, defaultSSLPath)
 
 	//Generate worker join key
 	randKey := make([]byte, 128)
@@ -608,7 +618,19 @@ func main() {
 
 	//configPtr := flag.String("config", "", "Path to config file. (Default: /etc/mozart/config.json)")
 	serverPtr := flag.String("server", "", "IP address for server.")
+	serversPtr := flag.String("servers", "", "IP addresses for servers.")
 	flag.Parse()
+
+	//Test parsing multiple IP's
+	//MAY ACTUALLY ONLY NEED TO KNOW THE NUMBER OF MASTERS YOU EXPECT.
+	cleaned := strings.Replace(*serversPtr, ",", " ", -1)
+ // convert 'clened' comma separated string to slice
+ 	strSlice := strings.Fields(cleaned)
+	fmt.Println("Servers:", strSlice)
+	//return
+
+
+
 	//Make sure server flag is given.
 	// if *configPtr == "" {
 	// 	readServerConfigFile("/etc/mozart/config.json")
@@ -618,6 +640,7 @@ func main() {
 
 	//Check if server config exist, if not, run the install.
 	if _, err = os.Stat("/etc/mozart/config.json"); err != nil {
+		fmt.Println("No config file found. Creating one...")
 		if *serverPtr == "" {
 			if env := os.Getenv("MOZART_SERVER_IP"); env == "" {
 				log.Fatal("Must provide this server's IP.")
@@ -629,21 +652,29 @@ func main() {
 	}
 
 	config = readServerConfigFile("/etc/mozart/config.json")
-
 	//Load Certs into memory
 	//err := errors.New("")
-	serverTLSCert, err = ioutil.ReadFile(config.ServerCert)
-	if err != nil {
-		panic(err)
-	}
-	serverTLSKey, err = ioutil.ReadFile(config.ServerKey)
-	if err != nil {
-		panic(err)
-	}
 	caTLSCert, err = ioutil.ReadFile(config.CaCert)
 	if err != nil {
 		panic(err)
 	}
+	//serverTLSCert, serverTLSKey = generateSignedKeyPairToMemory(config.Name+"-ca.crt", config.Name+"-ca.key", "server", config.ServerIP)
+	fmt.Println("Creating server keypair...")
+	generateSignedKeyPair(config.Name+"-ca.crt", config.Name+"-ca.key", "server", config.ServerIP, defaultSSLPath)
+	//serverTLSCert, err = ioutil.ReadFile(config.ServerCert)
+	serverTLSCert, err = ioutil.ReadFile("/etc/mozart/ssl/server.crt")
+	if err != nil {
+		panic(err)
+	}
+	//serverTLSKey, err = ioutil.ReadFile(config.ServerKey)
+	serverTLSKey, err = ioutil.ReadFile("/etc/mozart/ssl/server.key")
+	if err != nil {
+		panic(err)
+	}
+	config.ServerCert = "/etc/mozart/ssl/server.crt"
+	config.ServerKey = "/etc/mozart/ssl/server.key"
+
+	go startRaft()
 
 	//Start subprocesses
 	go monitorWorkers()

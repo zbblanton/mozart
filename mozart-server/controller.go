@@ -9,6 +9,10 @@ import (
 	//"net/http"
 )
 
+func containerControllerQueueAdd(d interface{})  {
+	containerQueue <- d
+}
+
 //////////////////////////////////////////////////////////
 func containerControllerQueue(messages chan interface{}) {
 	//Set a ticker for a small delay (may not be needed for this queue)
@@ -50,6 +54,9 @@ func containerControllerExecutor(msg interface{}) bool {
 	case string:
 		msg := msg.(string)
 		return containerControllerStop(msg)
+	case StateUpdateReq:
+		msg := msg.(StateUpdateReq)
+		return containersStateUpdate(msg)
 	default:
 		eventError("Not action available for Container Controller.")
 		return true //Returns as true because we don't want it to run again.
@@ -227,7 +234,54 @@ func containerControllerStop(name string) bool {
 	return true
 }
 
+//ContainersStateUpdate - Update container state
+func containersStateUpdate(j StateUpdateReq) bool {
+	//TODO: Verify Worker Key here, the container must live on this host.
+	//containers.mux.Lock()
+	fmt.Print(j)
+	var container Container
+	c, _ := ds.Get("mozart/containers/" + j.ContainerName)
+	err := json.Unmarshal(c, &container)
+	if err != nil {
+		eventError(err)
+		return false
+	}
+	if j.State == "stopped" && container.DesiredState == "stopped" {
+		ds.Del("mozart/containers/" + container.Name)
+		//Update worker container run list
+		var worker Worker
+		workerBytes, _ := ds.Get("mozart/workers/" + container.Worker)
+		err = json.Unmarshal(workerBytes, &worker)
+		if err != nil {
+			eventError(err)
+			return false
+		}
+		delete(worker.Containers, container.Name)
+		workerToBytes, err := json.Marshal(worker)
+		if err != nil {
+			eventError(err)
+			return false
+		}
+		ds.Put("mozart/workers/"+container.Worker, workerToBytes)
+	} else {
+		container.State = j.State
+		fmt.Print(container)
+		b, err := json.Marshal(container)
+		if err != nil {
+			eventError(err)
+			return false
+		}
+		ds.Put("mozart/containers/"+container.Name, b)
+	}
+
+	return true
+}
+
 //////////////////////////////////////////////////////////
+
+func workerControllerQueueAdd(d ControllerMsg)  {
+	workerQueue <- d
+}
 
 func workerControllerQueue(messages chan ControllerMsg) {
 	//Set a ticker for a small delay (may not be needed for this queue)

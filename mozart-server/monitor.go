@@ -47,7 +47,8 @@ func monitorWorkers() {
 					///////////////////////////////////////////
 					data := ControllerReconnectMsg{worker: worker, disconnectTime: time.Now()}
 					q := ControllerMsg{Action: "reconnect", Data: data}
-					workerQueue <- q
+					//workerQueue <- q
+					workerControllerQueueAdd(q)
 				}
 			}
 			//fmt.Print(worker)

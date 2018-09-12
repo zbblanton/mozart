@@ -79,6 +79,43 @@ func generateSignedKeyPair(caCert string, caKey string, keyPairName string, ip s
 	keyOut.Close()
 }
 
+//Only supports 1 IP.  No multiple hostname or IP support yet.
+func generateSignedKeyPairToMemory(caCert string, caKey string, keyPairName string, ip string) (publicKey, privateKey []byte){
+	// Load CA
+	catls, err := tls.LoadX509KeyPair(defaultSSLPath+caCert, defaultSSLPath+caKey)
+	if err != nil {
+		panic(err)
+	}
+	ca, err := x509.ParseCertificate(catls.Certificate[0])
+	if err != nil {
+		panic(err)
+	}
+	// Prepare certificate
+	cert := &x509.Certificate{
+		SerialNumber: big.NewInt(1658),
+		Subject: pkix.Name{
+			Organization: []string{"Mozart"},
+		},
+		NotBefore:    time.Now(),
+		NotAfter:     time.Now().AddDate(10, 0, 0),
+		SubjectKeyId: []byte{1, 2, 3, 4, 6},
+		IPAddresses:  []net.IP{net.ParseIP(ip)},
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}
+	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pub := &priv.PublicKey
+	// Sign the certificate
+	certB, err := x509.CreateCertificate(rand.Reader, cert, ca, pub, catls.PrivateKey)
+	if err != nil {
+		panic(err)
+	}
+
+	publicKey = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certB})
+	privateKey = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
+	return publicKey, privateKey
+}
+
 func generateCaKeyPair(caPairName string) {
 	ca := &x509.Certificate{
 		SerialNumber: big.NewInt(1653),

@@ -21,6 +21,9 @@ import (
 	"os/user"
 	"errors"
 	"strconv"
+	"time"
+	"strings"
+	mathrand "math/rand"
 )
 
 //Config - Control config
@@ -30,7 +33,7 @@ type UserConfigs struct {
 }
 
 type Config struct {
-	Server     	 string
+	Servers      []string
 	AuthType   	 string
 	Account      string
 	AccessKey    string
@@ -45,12 +48,13 @@ type ServerConfig struct {
 	Name         string
 	ServerIP     string
 	ServerPort   string
+	Servers      []string
 	AgentPort    string
 	AgentJoinKey string
 	CaCert       string
 	CaKey        string
-	ServerCert   string
-	ServerKey    string
+	//ServerCert   string
+	//ServerKey    string
 }
 
 
@@ -67,6 +71,16 @@ type ContainerListResp struct {
 	Containers map[string]Container
 	Success    bool
 	Error      string
+}
+
+//ClusterConfigResp - Response for cluster config
+type ClusterConfigResp struct {
+	Servers []string
+	Ca      string
+	CaHash  string
+	JoinKey string
+	Success bool
+	Error   string
 }
 
 //Worker - Worker struct
@@ -268,7 +282,14 @@ func callServerByCred(uri string, body io.Reader) (respBody []byte, err error) {
 	secureClient := &http.Client{Transport: clientTr}
 
 	// Still works with host-trusted CAs!
-	url := "https://" + config.Server + ":48433/" + uri
+	var selectedMaster string
+	if len(config.Servers) == 1 {
+		selectedMaster = config.Servers[mathrand.Intn(len(config.Servers))]
+	} else {
+		selectedMaster = config.Servers[mathrand.Intn(len(config.Servers) - 1)]
+	}
+
+	url := "https://" + selectedMaster + ":48433/" + uri
 	req, err := http.NewRequest(http.MethodPost, url, body)
 	if err != nil {
 		return respBody, err
@@ -293,11 +314,6 @@ func callServerByKey(uri string, body io.Reader) (respBody []byte, err error) {
 	config := readConfigFile(home + ".mozart/config.json")
 	pubKey := config.ClientKey
 	privKey := config.ClientCert
-
-	// config := readServerConfigFile("/etc/mozart/config.json")
-	// pubKey := config.ServerCert
-	// privKey := config.ServerKey
-	//method := "POST"
 
 	//Load our key pair
 	clientKeyPair, err := tls.LoadX509KeyPair(pubKey, privKey)
@@ -339,7 +355,14 @@ func callServerByKey(uri string, body io.Reader) (respBody []byte, err error) {
 	secureClient := &http.Client{Transport: clientTr}
 
 	// Still works with host-trusted CAs!
-	url := "https://" + config.Server + ":47433/" + uri
+	var selectedMaster string
+	if len(config.Servers) == 1 {
+		selectedMaster = config.Servers[mathrand.Intn(len(config.Servers))]
+	} else {
+		selectedMaster = config.Servers[mathrand.Intn(len(config.Servers) - 1)]
+	}
+
+	url := "https://" + selectedMaster + ":47433/" + uri
 	req, err := http.NewRequest(http.MethodPost, url, body)
 	if err != nil {
 		return respBody, err
@@ -404,6 +427,20 @@ func generateSha256(file string) string {
 	return base64.URLEncoding.EncodeToString(h.Sum(nil))
 }
 
+func formatServers(serversList []string) string {
+	//Format servers string
+	var servers string
+	for key, server := range serversList {
+		if (len(config.Servers) - 1) == key {
+			servers = server
+		} else {
+			servers = server + ","
+		}
+	}
+
+	return servers
+}
+
 func clusterSwitch(c *cli.Context) {
 	switchTo := c.Args().First()
 	if switchTo == "" {
@@ -435,12 +472,22 @@ func clusterSwitch(c *cli.Context) {
 func clusterCreate(c *cli.Context) {
 	name := c.String("name")
 	server := c.String("server")
+	serversCSV := c.String("servers")
 	if name == "" {
 		log.Fatal("Please provide a name for the server.")
 	}
 
 	if server == "" {
 		log.Fatal("Please provide the Mozart server address.")
+	}
+
+	var servers []string
+	if serversCSV == "" {
+			servers = []string{server}
+	} else {
+		cleanString := strings.Replace(serversCSV, ",", " ", -1)
+	 	convertToArray := strings.Fields(cleanString)
+		servers = convertToArray
 	}
 
 	if net.ParseIP(server) == nil {
@@ -469,8 +516,8 @@ func clusterCreate(c *cli.Context) {
 
 	fmt.Println("Creating Mozart CA...")
 	generateCaKeyPair(name + "-ca")
-	fmt.Println("Creating server keypair...")
-	generateSignedKeyPair(name+"-ca.crt", name+"-ca.key", name+"-server", server, defaultSSLPath)
+	//fmt.Println("Creating server keypair...")
+	//generateSignedKeyPair(name+"-ca.crt", name+"-ca.key", name+"-server", server, defaultSSLPath)
 	fmt.Println("Creating client keypair...")
 	generateSignedKeyPair(name+"-ca.crt", name+"-ca.key", name+"-client", server, home+".mozart/keys/")
 
@@ -488,12 +535,13 @@ func clusterCreate(c *cli.Context) {
 		Name:         name,
 		ServerIP:     server,
 		ServerPort:   "47433",
+		Servers:			servers,
 		AgentPort:    "49433",
 		AgentJoinKey: joinKey,
 		CaCert:       defaultSSLPath + name + "-ca.crt",
 		CaKey:        defaultSSLPath + name + "-ca.key",
-		ServerCert:   defaultSSLPath + name + "-server.crt",
-		ServerKey:    defaultSSLPath + name + "-server.key",
+		//ServerCert:   defaultSSLPath + name + "-server.crt",
+		//ServerKey:    defaultSSLPath + name + "-server.key",
 	}
 	writeServerConfigFile(defaultConfigPath+"config.json", serverConfig)
 
@@ -505,7 +553,7 @@ func clusterCreate(c *cli.Context) {
 
 	//Create config file
 	config := Config{
-		Server:     server,
+		Servers:     servers,
 		AuthType:   "key",
 		ClientKey:  home + ".mozart/keys/" + name + "-client.crt",
 		ClientCert: home + ".mozart/keys/" + name + "-client.key",
@@ -549,22 +597,13 @@ func clusterCreate(c *cli.Context) {
 	fmt.Printf("\n\n\n")
 	fmt.Println("Once the server has been set up, add workers by running this command:")
 	//fmt.Printf("mozart-agent --server=%s --agent=INSERT_AGENT_IP --key=%s --ca-hash=%s", server, joinKey, caHash)
-	fmt.Printf(`docker run --name mozart-agent -d --restart=always --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 49433:49433 -e "MOZART_SERVER_IP=%s" -e "MOZART_AGENT_IP=INSERT_HOST_IP_HERE" -e "MOZART_JOIN_KEY=%s" -e "MOZART_CA_HASH=%s" zbblanton/mozart-agent`, server, joinKey, caHash)
+	fmt.Printf(`docker run --name mozart-agent -d --restart=always --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 49433:49433 -e "MOZART_MASTERS=%s" -e "MOZART_AGENT_IP=INSERT_HOST_IP_HERE" -e "MOZART_JOIN_KEY=%s" -e "MOZART_CA_HASH=%s" zbblanton/mozart-agent`, serversCSV, joinKey, caHash)
 	fmt.Printf("\n\n\n")
 }
 
 func clusterPrint(c *cli.Context) {
 	home := getHomeDirectory()
 	if _, err := os.Stat(home+".mozart/config.json"); err == nil {
-		type ClusterConfigResp struct {
-			Server  string
-			Ca      string
-			CaHash  string
-			JoinKey string
-			Success bool
-			Error   string
-		}
-
 		var config ClusterConfigResp
 		uri := "cluster/config/"
 		resp, err := callServer(uri, nil)
@@ -576,10 +615,11 @@ func clusterPrint(c *cli.Context) {
 				panic(err)
 			}
 
+			servers := formatServers(config.Servers)
+
 			fmt.Printf("\n\n\n")
 			fmt.Println("Once the server has been set up, add workers by running this command:")
-			//fmt.Printf("mozart-agent --server=%s --agent=INSERT_AGENT_IP --key=%s --ca-hash=%s", config.ServerIP, config.AgentJoinKey, caHash)
-			fmt.Printf(`docker run --name mozart-agent -d --restart=always --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 49433:49433 -e "MOZART_SERVER_IP=%s" -e "MOZART_AGENT_IP=INSERT_HOST_IP_HERE" -e "MOZART_JOIN_KEY=%s" -e "MOZART_CA_HASH=%s" zbblanton/mozart-agent`, config.Server, config.JoinKey, config.CaHash)
+			fmt.Printf(`docker run --name mozart-agent -d --restart=always --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 49433:49433 -e "MOZART_MASTERS=%s" -e "MOZART_AGENT_IP=INSERT_HOST_IP_HERE" -e "MOZART_JOIN_KEY=%s" -e "MOZART_CA_HASH=%s" zbblanton/mozart-agent`, servers, config.JoinKey, config.CaHash)
 			fmt.Printf("\n\n\n")
 
 			return
@@ -594,8 +634,7 @@ func clusterPrint(c *cli.Context) {
 
 	fmt.Printf("\n\n\n")
 	fmt.Println("Once the server has been set up, add workers by running this command:")
-	//fmt.Printf("mozart-agent --server=%s --agent=INSERT_AGENT_IP --key=%s --ca-hash=%s", config.ServerIP, config.AgentJoinKey, caHash)
-	fmt.Printf(`docker run --name mozart-agent -d --restart=always --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 49433:49433 -e "MOZART_SERVER_IP=%s" -e "MOZART_AGENT_IP=INSERT_HOST_IP_HERE" -e "MOZART_JOIN_KEY=%s" -e "MOZART_CA_HASH=%s" zbblanton/mozart-agent`, serverConfig.ServerIP, serverConfig.AgentJoinKey, caHash)
+	fmt.Printf(`docker run --name mozart-agent -d --restart=always --privileged -v /var/run/docker.sock:/var/run/docker.sock -p 49433:49433 -e "MOZART_MASTERS=%s" -e "MOZART_AGENT_IP=INSERT_HOST_IP_HERE" -e "MOZART_JOIN_KEY=%s" -e "MOZART_CA_HASH=%s" zbblanton/mozart-agent`, serverConfig.ServerIP, serverConfig.AgentJoinKey, caHash)
 	fmt.Printf("\n\n\n")
 }
 
@@ -618,9 +657,11 @@ func clusterList(c *cli.Context) {
 	table.SetHeader([]string{"Cluster Name", "Server", "Authentication Type", "Selected"})
 	for name, c := range config.Configs {
 		if(name == config.Selected){
-			table.Append([]string{name, c.Server, c.AuthType, "*"})
+			serversString := formatServers(c.Servers)
+			table.Append([]string{name, serversString, c.AuthType, "*"})
 		} else {
-			table.Append([]string{name, c.Server, c.AuthType, ""})
+			serversString := formatServers(c.Servers)
+			table.Append([]string{name, serversString, c.AuthType, ""})
 		}
 	}
 	table.Render() // Send output
@@ -851,6 +892,8 @@ var defaultConfigPath = "/etc/mozart/"
 var config = Config{}
 
 func main() {
+	mathrand.Seed(time.Now().Unix())
+
 	app := cli.NewApp()
 	app.Name = "mozartctl"
 	app.Usage = "CLI for Mozart clusters."
@@ -868,7 +911,7 @@ func main() {
 				{
 					Name:   "create",
 					Usage:  "Generate a new cluster config and files.",
-					Flags:  []cli.Flag{flagClusterName, flagClusterServer},
+					Flags:  []cli.Flag{flagClusterName, flagClusterServer, flagClusterServers},
 					Action: clusterCreate,
 				},
 				{

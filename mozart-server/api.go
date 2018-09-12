@@ -27,13 +27,13 @@ func RootHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("Hi there :)\n"))
 }
 
-//NodeInitialJoinHandler - Node Initial Join
-func NodeInitialJoinHandler(w http.ResponseWriter, r *http.Request) {
+//InitialJoinHandler - Node Initial Join
+func InitialJoinHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(http.StatusOK)
 	defer r.Body.Close()
 
-	j := NodeInitialJoinReq{}
+	j := InitialJoinReq{}
 	json.NewDecoder(r.Body).Decode(&j)
 
 	//Verify key
@@ -54,7 +54,7 @@ func NodeInitialJoinHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//Sign the CSR
-	signedCert, err := signCSR(config.CaCert, config.CaKey, csr, j.AgentIP)
+	signedCert, err := signCSR(config.CaCert, config.CaKey, csr, j.IP)
 	if err != nil {
 		resp := Resp{Success: false, Error: "Error during initial join."}
 		json.NewEncoder(w).Encode(resp)
@@ -174,7 +174,8 @@ func ContainersCreateHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewDecoder(r.Body).Decode(&j)
 	if containersCreateVerification(j) {
 		fmt.Println("Received a run request for config: ", j, "adding to queue.")
-		containerQueue <- j
+		//containerQueue <- j
+		containerControllerQueueAdd(j)
 		resp := Resp{true, ""}
 		json.NewEncoder(w).Encode(resp)
 	} else {
@@ -206,7 +207,8 @@ func ContainersStopHandler(w http.ResponseWriter, r *http.Request) {
 		resp := Resp{true, ""}
 		json.NewEncoder(w).Encode(resp)
 		//Add to queue
-		containerQueue <- containerName
+		//containerQueue <- containerName
+		containerControllerQueueAdd(containerName)
 	}
 }
 
@@ -216,60 +218,57 @@ func ContainersStateUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	defer r.Body.Close()
 
-	type StateUpdateReq struct {
-		Key           string
-		ContainerName string
-		State         string
-	}
-
 	j := StateUpdateReq{}
 	json.NewDecoder(r.Body).Decode(&j)
 
-	//TODO: Verify Worker Key here, the container must live on this host.
-	//containers.mux.Lock()
-	fmt.Print(j)
-	var container Container
-	c, _ := ds.Get("mozart/containers/" + j.ContainerName)
-	err := json.Unmarshal(c, &container)
-	if err != nil {
-		eventError(err)
-		resp := Resp{Success: false, Error: err.Error()}
-		json.NewEncoder(w).Encode(resp)
-		return
-	}
-	if j.State == "stopped" && container.DesiredState == "stopped" {
-		ds.Del("mozart/containers/" + container.Name)
-		//Update worker container run list
-		var worker Worker
-		workerBytes, _ := ds.Get("mozart/workers/" + container.Worker)
-		err = json.Unmarshal(workerBytes, &worker)
-		if err != nil {
-			eventError(err)
-			resp := Resp{Success: false, Error: err.Error()}
-			json.NewEncoder(w).Encode(resp)
-			return
-		}
-		delete(worker.Containers, container.Name)
-		workerToBytes, err := json.Marshal(worker)
-		if err != nil {
-			eventError(err)
-			resp := Resp{Success: false, Error: err.Error()}
-			json.NewEncoder(w).Encode(resp)
-			return
-		}
-		ds.Put("mozart/workers/"+container.Worker, workerToBytes)
-	} else {
-		container.State = j.State
-		fmt.Print(container)
-		b, err := json.Marshal(container)
-		if err != nil {
-			eventError(err)
-			resp := Resp{Success: false, Error: err.Error()}
-			json.NewEncoder(w).Encode(resp)
-			return
-		}
-		ds.Put("mozart/containers/"+container.Name, b)
-	}
+	containerControllerQueueAdd(j)
+
+	//
+	// //TODO: Verify Worker Key here, the container must live on this host.
+	// //containers.mux.Lock()
+	// fmt.Print(j)
+	// var container Container
+	// c, _ := ds.Get("mozart/containers/" + j.ContainerName)
+	// err := json.Unmarshal(c, &container)
+	// if err != nil {
+	// 	eventError(err)
+	// 	resp := Resp{Success: false, Error: err.Error()}
+	// 	json.NewEncoder(w).Encode(resp)
+	// 	return
+	// }
+	// if j.State == "stopped" && container.DesiredState == "stopped" {
+	// 	ds.Del("mozart/containers/" + container.Name)
+	// 	//Update worker container run list
+	// 	var worker Worker
+	// 	workerBytes, _ := ds.Get("mozart/workers/" + container.Worker)
+	// 	err = json.Unmarshal(workerBytes, &worker)
+	// 	if err != nil {
+	// 		eventError(err)
+	// 		resp := Resp{Success: false, Error: err.Error()}
+	// 		json.NewEncoder(w).Encode(resp)
+	// 		return
+	// 	}
+	// 	delete(worker.Containers, container.Name)
+	// 	workerToBytes, err := json.Marshal(worker)
+	// 	if err != nil {
+	// 		eventError(err)
+	// 		resp := Resp{Success: false, Error: err.Error()}
+	// 		json.NewEncoder(w).Encode(resp)
+	// 		return
+	// 	}
+	// 	ds.Put("mozart/workers/"+container.Worker, workerToBytes)
+	// } else {
+	// 	container.State = j.State
+	// 	fmt.Print(container)
+	// 	b, err := json.Marshal(container)
+	// 	if err != nil {
+	// 		eventError(err)
+	// 		resp := Resp{Success: false, Error: err.Error()}
+	// 		json.NewEncoder(w).Encode(resp)
+	// 		return
+	// 	}
+	// 	ds.Put("mozart/containers/"+container.Name, b)
+	// }
 
 	resp := Resp{true, ""}
 	json.NewEncoder(w).Encode(resp)
@@ -492,7 +491,8 @@ func ClusterConfigHandler(w http.ResponseWriter, r *http.Request) {
 func startAccountAndJoinServer(serverIP string, joinPort string, caCert string, serverCert string, serverKey string) {
 	router := mux.NewRouter().StrictSlash(true)
 
-	router.HandleFunc("/nodes/initialjoin", NodeInitialJoinHandler)
+	router.HandleFunc("/nodes/initialjoin", InitialJoinHandler)
+	router.HandleFunc("/masters/initialjoin", InitialJoinHandler)
 
 	router.HandleFunc("/containers/create", CheckAccountAuth(ContainersCreateHandler))
 	router.HandleFunc("/containers/stop/{container}", CheckAccountAuth(ContainersStopHandler))
