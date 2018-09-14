@@ -1,10 +1,12 @@
 package main
 
 import (
+  "bytes"
   "fmt"
   "math/rand"
   "time"
   "net/http"
+  "encoding/json"
 
   "github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -14,7 +16,12 @@ type MasterInfo struct {
   leader        string
   candidate     bool
   electionTimer *time.Timer
-  voted         bool
+  votedFor      string
+  currentServer string
+}
+
+type raftReq struct {
+  Server  string
 }
 
 func resetElectionTimeout(){
@@ -30,7 +37,7 @@ func resetElectionTimeout(){
 func leaderElection() {
   fmt.Println("Becoming a candidate and running a vote.")
   master.candidate = true
-  master.voted = true
+  master.votedFor = master.currentServer
   votes := 1
 
   for key, IP := range config.Servers {
@@ -44,13 +51,13 @@ func leaderElection() {
 
   if float64(votes) / float64(len(config.Servers)) > 0.5 {
     master.candidate = false
-    master.leader = config.ServerIP
+    master.leader = master.currentServer
     fmt.Println("This server is now the leader.")
     for ;; {
       heartbeat := time.NewTimer(1 * time.Second)
       heartbeats := 1
       for key, IP := range config.Servers {
-        if IP != config.ServerIP {
+        if IP != master.currentServer {
           fmt.Println("Sending heartbeat to", key)
           if callHeartbeat(IP) {
             heartbeats++
@@ -70,7 +77,10 @@ func leaderElection() {
 }
 
 func callHeartbeat(server string) bool {
-  req, err := http.NewRequest("GET", "http://" + server + "47433:/heartbeat", nil)
+	j := raftReq{Server: server}
+	b := new(bytes.Buffer)
+	json.NewEncoder(b).Encode(j)
+  req, err := http.NewRequest("GET", "http://" + server + "47433:/heartbeat", b)
   if err != nil {
     fmt.Println(err)
     return false
@@ -88,7 +98,10 @@ func callHeartbeat(server string) bool {
 
 
 func callVote(server string) bool {
-  req, err := http.NewRequest("GET", "http://" + server + "47433:/vote", nil)
+	j := raftReq{Server: server}
+	b := new(bytes.Buffer)
+	json.NewEncoder(b).Encode(j)
+  req, err := http.NewRequest("GET", "http://" + server + "47433:/vote", b)
   if err != nil {
     fmt.Println(err)
     return false
@@ -115,16 +128,29 @@ func callVote(server string) bool {
 //---------------------API------------------------------------------------
 func heartbeatHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
+
+  defer r.Body.Close()
+	j := raftReq{}
+	json.NewDecoder(r.Body).Decode(&j)
+  if j.Server == master.votedFor {
+    master.leader = j.Server
+  }
+
 	w.WriteHeader(http.StatusOK)
   resetElectionTimeout()
 }
 
 func voteHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
-  if master.candidate || master.voted == true {
+
+  defer r.Body.Close()
+	j := raftReq{}
+	json.NewDecoder(r.Body).Decode(&j)
+
+  if master.candidate || master.votedFor != "" {
     w.WriteHeader(http.StatusLocked)
   } else {
-    master.voted = true
+    master.votedFor = j.Server
     w.WriteHeader(http.StatusOK)
   }
   resetElectionTimeout()
@@ -157,7 +183,8 @@ func startRaft() {
   //Election Timeout
   for ;; {
     resetElectionTimeout()
-    master.voted = false
+    master.votedFor = ""
+    master.leader = ""
     <-master.electionTimer.C
     leaderElection()
   }

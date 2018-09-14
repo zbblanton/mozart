@@ -235,7 +235,7 @@ var serverTLSCert = []byte{}
 var serverTLSKey = []byte{}
 var caTLSCert = []byte{}
 var defaultSSLPath = "/etc/mozart/ssl/"
-var master = MasterInfo{candidate: false}
+var master = MasterInfo{}
 
 // func readConfigFile(file string) {
 // 	f, err := os.Open(file)
@@ -674,6 +674,7 @@ func main() {
 	config.ServerCert = "/etc/mozart/ssl/server.crt"
 	config.ServerKey = "/etc/mozart/ssl/server.key"
 
+	master = MasterInfo{candidate: false, currentServer: config.ServerIP}
 	go startRaft()
 
 	//Start subprocesses
