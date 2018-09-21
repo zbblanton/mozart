@@ -9,12 +9,52 @@ import (
 	//"net/http"
 )
 
-func containerControllerQueueAdd(d interface{})  {
-	containerQueue <- d
+func containerControllerQueueAdd(d ControllerMsg)  {
+	if !multiMaster || master.leader == master.currentServer {
+		containerQueue <- d
+		return
+	}
+
+	// a, e := json.Marshal(d.Data.(ContainerConfig))
+	// if e != nil {
+	// 	fmt.Println("error:", e)
+	// }
+	// h := json.RawMessage(a)
+	// fakesend := TestControllerMsg{d.Action, h}
+
+	// fakesendjson, e1 := json.Marshal(d)
+	// if e1 != nil {
+	// 	fmt.Println("error:", e1)
+	// }
+
+	b := new(bytes.Buffer)
+	json.NewEncoder(b).Encode(d)
+
+	// var test RawControllerMsg
+	// t1 := json.Unmarshal(fakesendjson, &test)
+	// if t1 != nil {
+	// 	fmt.Println(t1)
+	// }
+	// fmt.Println("TESTING HANDLER:", test)
+	// var test2 ContainerConfig
+	// t := json.Unmarshal(test.Data, &test2)
+	// if t != nil {
+	// 	fmt.Println(t)
+	// }
+	// fmt.Println(test)
+	// fmt.Println(test2)
+
+
+	url := "https://" + master.leader + ":47433" + "/containers/queue/add"
+	//It says it calls a secure agent but it actually calls the leader.
+	_, err := callSecuredAgent(serverTLSCert, serverTLSKey, caTLSCert, "POST", url, b)
+	if err != nil {
+		eventError(err)
+	}
 }
 
 //////////////////////////////////////////////////////////
-func containerControllerQueue(messages chan interface{}) {
+func containerControllerQueue(messages chan ControllerMsg) {
 	//Set a ticker for a small delay (may not be needed for this queue)
 	//Range through the messages, running executor on each
 	//if it fails, add the retry queue
@@ -29,7 +69,7 @@ func containerControllerQueue(messages chan interface{}) {
 	}
 }
 
-func containerControllerRetryQueue(messages chan interface{}) {
+func containerControllerRetryQueue(messages chan ControllerMsg) {
 	//Set a ticker for a retry delay (careful, make sure the delay is what you want)
 	//Range through the messages, running executor on each
 	//if it fails, add to the retry queue again
@@ -42,20 +82,21 @@ func containerControllerRetryQueue(messages chan interface{}) {
 	}
 }
 
-func containerControllerExecutor(msg interface{}) bool {
+func containerControllerExecutor(msg ControllerMsg) bool {
 	//Case for each command, run the function matching the command and struct type
-	switch msg.(type) {
-	case ContainerConfig:
-		msg := msg.(ContainerConfig)
+	fmt.Println("The Action is:", msg.Action)
+	switch msg.Action {
+	case "create":
+		msg := msg.Data.(ContainerConfig)
 		return containerControllerStart(msg)
-	case Container:
-		msg := msg.(Container)
+	case "move":
+		msg := msg.Data.(Container)
 		return containerControllerMove(msg)
-	case string:
-		msg := msg.(string)
+	case "stop":
+		msg := msg.Data.(string)
 		return containerControllerStop(msg)
-	case StateUpdateReq:
-		msg := msg.(StateUpdateReq)
+	case "stateUpdate":
+		msg := msg.Data.(StateUpdateReq)
 		return containersStateUpdate(msg)
 	default:
 		eventError("Not action available for Container Controller.")
@@ -354,7 +395,9 @@ func workerControllerExecutor(msg ControllerMsg) bool {
 					eventError(err)
 					return false
 				}
-				containerQueue <- container
+				q := ControllerMsg{Action: "move", Data: container}
+				containerControllerQueueAdd(q)
+				//containerQueue <- container
 			}
 			return true
 		}

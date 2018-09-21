@@ -226,7 +226,8 @@ func (e *EtcdDataStore) ifExist(key string) (exist bool, err error) {
 }
 
 func (e *EtcdDataStore) Put(key string, val []byte) error {
-  _, err := e.cli.Put(e.ctx, key, string(val))
+	//if !multiMaster || master.leader == master.currentServer {
+	_, err := e.cli.Put(e.ctx, key, string(val))
   if err != nil {
       return err
   }

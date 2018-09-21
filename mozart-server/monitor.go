@@ -10,6 +10,10 @@ func monitorWorkers() {
 	fmt.Println("Waiting 5 seconds before starting the worker controller!")
 	time.Sleep(time.Duration(5) * time.Second)
 	for {
+		if multiMaster && master.leader != master.currentServer {
+			time.Sleep(time.Duration(10) * time.Second)
+			continue
+		}
 		//Create worker map
 		workers := make(map[string]Worker)
 
@@ -20,6 +24,7 @@ func monitorWorkers() {
 			err := json.Unmarshal(v, &data)
 			if err != nil {
 				eventError(err)
+				time.Sleep(time.Duration(10) * time.Second)
 				continue
 			}
 			workers[k] = data

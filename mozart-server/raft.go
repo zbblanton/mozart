@@ -77,10 +77,10 @@ func leaderElection() {
 }
 
 func callHeartbeat(server string) bool {
-	j := raftReq{Server: server}
+	j := raftReq{Server: master.currentServer}
 	b := new(bytes.Buffer)
 	json.NewEncoder(b).Encode(j)
-  req, err := http.NewRequest("GET", "http://" + server + "47433:/heartbeat", b)
+  req, err := http.NewRequest("GET", "http://" + server + ":46433/heartbeat", b)
   if err != nil {
     fmt.Println(err)
     return false
@@ -98,16 +98,16 @@ func callHeartbeat(server string) bool {
 
 
 func callVote(server string) bool {
-	j := raftReq{Server: server}
+	j := raftReq{Server: master.currentServer}
 	b := new(bytes.Buffer)
 	json.NewEncoder(b).Encode(j)
-  req, err := http.NewRequest("GET", "http://" + server + "47433:/vote", b)
+  req, err := http.NewRequest("GET", "http://" + server + ":46433/vote", b)
   if err != nil {
     fmt.Println(err)
     return false
   }
   client := &http.Client{
-    Timeout: time.Second,
+    Timeout: time.Second * time.Duration(3),
   }
   resp, err := client.Do(req)
   if err != nil {
@@ -132,8 +132,9 @@ func heartbeatHandler(w http.ResponseWriter, r *http.Request) {
   defer r.Body.Close()
 	j := raftReq{}
 	json.NewDecoder(r.Body).Decode(&j)
-  if j.Server == master.votedFor {
+  if master.leader != j.Server && j.Server == master.votedFor {
     master.leader = j.Server
+    fmt.Println("Leader is now", master.leader)
   }
 
 	w.WriteHeader(http.StatusOK)

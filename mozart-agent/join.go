@@ -21,9 +21,12 @@ func joinAgent(serverIP string, agentIP string, joinKey string, agentCaHash stri
 	//Step 1
 	fmt.Println("Starting Join Process...")
 	fmt.Println("Generating Private Key...")
-	privateKey, _ := rsa.GenerateKey(rand.Reader, 2048)
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		panic(err)
+	}
 	agentTLSKey = pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)})
-	fmt.Println("Generating CSR...")
+	fmt.Println("Generating CSR for", agentIP)
 	csr, err := generateCSR(privateKey, agentIP)
 	if err != nil {
 		panic(err)
@@ -34,7 +37,7 @@ func joinAgent(serverIP string, agentIP string, joinKey string, agentCaHash stri
 	csrString := base64.URLEncoding.EncodeToString(csr)
 
 	type NodeInitialJoinReq struct {
-		AgentIP string
+		AgentIP string `json:"IP"`
 		JoinKey string
 		Csr     string
 	}

@@ -115,7 +115,7 @@ func containerControllerExecutor(msg ControllerMsg) bool {
 		id, _ := DockerCreateContainer(msg.Name, msg.Config)
 		fmt.Print(id)
 		DockerStartContainer(id)
-		containerControllerUpdateStateWithMux(msg.Name, "running", *serverPtr)
+		containerControllerUpdateStateWithMux(msg.Name, "running", selectServer())
 		//containerControllerUpdateState(msg.Name, "running", *serverPtr)
 		return true
 	case "recreate":
@@ -127,7 +127,7 @@ func containerControllerExecutor(msg ControllerMsg) bool {
 		id, _ := DockerCreateContainer(container.Name, container.Config)
 		fmt.Print(id)
 		DockerStartContainer(id)
-		containerControllerUpdateStateWithMux(container.Name, "running", *serverPtr)
+		containerControllerUpdateStateWithMux(container.Name, "running", selectServer())
 		return true
 		//}
 		//send reschedule to master and delete this container from the map.
@@ -145,7 +145,7 @@ func containerControllerExecutor(msg ControllerMsg) bool {
 			return false
 		}
 		//Send state update to master
-		containerControllerUpdateStateWithMux(msg, "stopped", *serverPtr)
+		containerControllerUpdateStateWithMux(msg, "stopped", selectServer())
 		containers.mux.Lock()
 		//Remove the container from the map
 		delete(containers.Containers, msg)

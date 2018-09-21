@@ -284,10 +284,13 @@ func callServerByCred(uri string, body io.Reader) (respBody []byte, err error) {
 	// Still works with host-trusted CAs!
 	var selectedMaster string
 	if len(config.Servers) == 1 {
-		selectedMaster = config.Servers[mathrand.Intn(len(config.Servers))]
+		//selectedMaster = config.Servers[mathrand.Intn(len(config.Servers))]
+		selectedMaster = config.Servers[0]
 	} else {
-		selectedMaster = config.Servers[mathrand.Intn(len(config.Servers) - 1)]
+		randomNum := mathrand.Intn(len(config.Servers))
+		selectedMaster = config.Servers[randomNum]
 	}
+	fmt.Println("Calling:", selectedMaster)
 
 	url := "https://" + selectedMaster + ":48433/" + uri
 	req, err := http.NewRequest(http.MethodPost, url, body)
@@ -357,10 +360,13 @@ func callServerByKey(uri string, body io.Reader) (respBody []byte, err error) {
 	// Still works with host-trusted CAs!
 	var selectedMaster string
 	if len(config.Servers) == 1 {
-		selectedMaster = config.Servers[mathrand.Intn(len(config.Servers))]
+		//selectedMaster = config.Servers[mathrand.Intn(len(config.Servers))]
+		selectedMaster = config.Servers[0]
 	} else {
-		selectedMaster = config.Servers[mathrand.Intn(len(config.Servers) - 1)]
+		randomNum := mathrand.Intn(len(config.Servers))
+		selectedMaster = config.Servers[randomNum]
 	}
+	fmt.Println("Calling:", selectedMaster)
 
 	url := "https://" + selectedMaster + ":47433/" + uri
 	req, err := http.NewRequest(http.MethodPost, url, body)

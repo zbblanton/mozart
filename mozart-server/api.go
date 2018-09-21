@@ -175,7 +175,8 @@ func ContainersCreateHandler(w http.ResponseWriter, r *http.Request) {
 	if containersCreateVerification(j) {
 		fmt.Println("Received a run request for config: ", j, "adding to queue.")
 		//containerQueue <- j
-		containerControllerQueueAdd(j)
+		q := ControllerMsg{Action: "create", Data: j}
+		containerControllerQueueAdd(q)
 		resp := Resp{true, ""}
 		json.NewEncoder(w).Encode(resp)
 	} else {
@@ -208,7 +209,8 @@ func ContainersStopHandler(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(resp)
 		//Add to queue
 		//containerQueue <- containerName
-		containerControllerQueueAdd(containerName)
+		q := ControllerMsg{Action: "stop", Data: containerName}
+		containerControllerQueueAdd(q)
 	}
 }
 
@@ -220,8 +222,8 @@ func ContainersStateUpdateHandler(w http.ResponseWriter, r *http.Request) {
 
 	j := StateUpdateReq{}
 	json.NewDecoder(r.Body).Decode(&j)
-
-	containerControllerQueueAdd(j)
+	q := ControllerMsg{Action: "stateUpdate", Data: j}
+	containerControllerQueueAdd(q)
 
 	//
 	// //TODO: Verify Worker Key here, the container must live on this host.
@@ -297,6 +299,69 @@ func ContainersListHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := ContainerListResp{containers, true, ""}
+	json.NewEncoder(w).Encode(resp)
+}
+
+func ContainerQueueAddHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	w.WriteHeader(http.StatusOK)
+	defer r.Body.Close()
+
+	var b RawControllerMsg
+	json.NewDecoder(r.Body).Decode(&b)
+	var y ControllerMsg
+	switch b.Action {
+	case "create":
+		var data ContainerConfig
+		err := json.Unmarshal(b.Data, &data)
+		if err != nil {
+			fmt.Println(err)
+		}
+		y = ControllerMsg{Action: b.Action, Data: data}
+	case "move":
+		var data Container
+		err := json.Unmarshal(b.Data, &data)
+		if err != nil {
+			fmt.Println(err)
+		}
+		y = ControllerMsg{Action: b.Action, Data: data}
+	case "stop":
+		var data string
+		err := json.Unmarshal(b.Data, &data)
+		if err != nil {
+			fmt.Println(err)
+		}
+		y = ControllerMsg{Action: b.Action, Data: data}
+	case "stateUpdate":
+		var data StateUpdateReq
+		err := json.Unmarshal(b.Data, &data)
+		if err != nil {
+			fmt.Println(err)
+		}
+		y = ControllerMsg{Action: b.Action, Data: data}
+	default:
+		eventError("Cannot add to Container Controller.")
+	}
+
+	//
+	// t1 := json.Unmarshal(fakesendjson, &test)
+	// if t1 != nil {
+	// 	fmt.Println(t1)
+	// }
+	// fmt.Println("TESTING HANDLER:", test)
+	// var data ContainerConfig
+	// t := json.Unmarshal(b.Data, &data)
+	// if t != nil {
+	// 	fmt.Println(t)
+	// }
+	// y := ControllerMsg{Action: b.Action, Data: data}
+	// fmt.Println(test)
+	// fmt.Println(test2)
+
+	// fmt.Println("Add HANDLER:", b)
+	containerControllerQueueAdd(y)
+
+	resp := Resp{true, ""}
 	json.NewEncoder(w).Encode(resp)
 }
 
@@ -530,6 +595,7 @@ func startAPIServer(serverIP string, serverPort string, caCert string, serverCer
 	router.HandleFunc("/containers/{container}/state/update", ContainersStateUpdateHandler)
 	router.HandleFunc("/containers/status/{container}", RootHandler)
 	router.HandleFunc("/containers/inspect/{container}", RootHandler)
+	router.HandleFunc("/containers/queue/add", ContainerQueueAddHandler)
 
 	router.HandleFunc("/workers/list/", WorkersListHandler)
 

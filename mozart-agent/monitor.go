@@ -6,7 +6,7 @@ import (
 )
 
 //MonitorContainers - Monitors the containers on the host for status changes
-func MonitorContainers(serverIP, agentIP string) {
+func MonitorContainers(agentIP string) {
 	ticker := time.NewTicker(10 * time.Second)
 	for {
 		//Loop through the containers and check the status, if not running send new state to master
@@ -23,7 +23,7 @@ func MonitorContainers(serverIP, agentIP string) {
 					//containerControllerUpdateState(container.Name, state, serverIp)
 					switch container.DesiredState {
 					case "running":
-						containerControllerUpdateStateWithoutMux(container.Name, "restarting", serverIP)
+						containerControllerUpdateStateWithoutMux(container.Name, "restarting", selectServer())
 						q := ControllerMsg{Action: "recreate", Data: container}
 						containerQueue <- q
 					default:

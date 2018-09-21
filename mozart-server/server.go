@@ -196,6 +196,12 @@ type ContainerInspectResp struct {
 	Error   string `json:"error"`
 }
 
+//RawControllerMsg - Raw Controller message
+type RawControllerMsg struct {
+	Action string
+	Data   json.RawMessage //Delay parsing
+}
+
 //ControllerMsg - Controller message
 type ControllerMsg struct {
 	Action  string
@@ -222,20 +228,21 @@ type Resp struct {
 	Error   string `json:"error"`
 }
 
-var ds = &FileDataStore{Path: "/var/lib/mozart/mozart.db"}
-//var ds = &EtcdDataStore{endpoints: []string{"192.168.0.45:2379"}}
+//var ds = &FileDataStore{Path: "/var/lib/mozart/mozart.db"}
+var ds = &EtcdDataStore{endpoints: []string{"192.168.0.45:2379"}}
 var counter = 1
 var defaultConfigPath = "/etc/mozart/"
 var config = ServerConfig{}
 var workerQueue = make(chan ControllerMsg, 3)
 var workerRetryQueue = make(chan ControllerMsg, 3)
-var containerQueue = make(chan interface{}, 3)
-var containerRetryQueue = make(chan interface{}, 3)
+var containerQueue = make(chan ControllerMsg, 3)
+var containerRetryQueue = make(chan ControllerMsg, 3)
 var serverTLSCert = []byte{}
 var serverTLSKey = []byte{}
 var caTLSCert = []byte{}
 var defaultSSLPath = "/etc/mozart/ssl/"
 var master = MasterInfo{}
+var multiMaster = false
 
 // func readConfigFile(file string) {
 // 	f, err := os.Open(file)
@@ -565,6 +572,15 @@ func installServer(server string){
 	// }
 }
 
+// func passToLeader(key string, val []byte) error {
+// 	url := "https://" + master.leader + ":47433" + "/passproxy"
+// 	_, err := callSecuredAgent(serverTLSCert, serverTLSKey, caTLSCert, "POST", master.leader, val)
+// 	if err != nil {
+// 		eventError(err)
+// 	}
+// 	return nil
+// }
+
 func callSecuredAgent(pubKey, privKey, ca []byte, method string, url string, body io.Reader) (respBody []byte, err error) {
 	//Load our key pair
 	clientKeyPair, err := tls.X509KeyPair(pubKey, privKey)
@@ -652,6 +668,10 @@ func main() {
 	}
 
 	config = readServerConfigFile("/etc/mozart/config.json")
+	if len(config.Servers) > 1 {
+		multiMaster = true
+		fmt.Println("More than one server found in config. Starting in multi-master mode.")
+	}
 	//Load Certs into memory
 	//err := errors.New("")
 	caTLSCert, err = ioutil.ReadFile(config.CaCert)

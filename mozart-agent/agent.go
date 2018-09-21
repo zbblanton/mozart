@@ -16,6 +16,8 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	mathrand "math/rand"
+	"strings"
 )
 
 //Container - Container information
@@ -136,6 +138,15 @@ func getContainerRuntime() string {
 	return "docker"
 }
 
+func selectServer() string {
+	if len(servers) == 1 {
+		return servers[0]
+	}
+	randomNum := mathrand.Intn(len(servers))
+	fmt.Println("Selected:", servers[randomNum])
+	return servers[randomNum]
+}
+
 func callInsecuredServer(method string, url string, body io.Reader) (respBody []byte, err error) {
 	c := &tls.Config{
 		InsecureSkipVerify: true,
@@ -162,6 +173,8 @@ func callInsecuredServer(method string, url string, body io.Reader) (respBody []
 
 func callSecuredServer(pubKey, privKey, ca []byte, method string, url string, body io.Reader) (respBody []byte, err error) {
 	//Load our key pair
+	// fmt.Println("pub::::", string(pubKey))
+	// fmt.Println("priv::::", string(privKey))
 	clientKeyPair, err := tls.X509KeyPair(pubKey, privKey)
 	if err != nil {
 		panic(err)
@@ -214,7 +227,6 @@ func generateCSR(privateKey *rsa.PrivateKey, IP string) (csr []byte, err error) 
 	if err != nil {
 		return nil, err
 	}
-
 	return csr, err
 }
 
@@ -240,8 +252,10 @@ var containerRetryQueue = make(chan ControllerMsg, 3)
 var containers = Containers{
 	Containers: make(map[string]Container)}
 
+var servers []string
+
 var agentPtr = flag.String("agent", "", "Hostname or IP to use for this agent. (Required)")
-var serverPtr = flag.String("server", "", "Hostname or IP of the mozart server. (Required)")
+var serversPtr = flag.String("servers", "", "Hostname or IP of the mozart servers. (Required)")
 var keyPtr = flag.String("key", "", "Mozart join key to join the cluster. (Required)")
 var caHashPtr = flag.String("ca-hash", "", "Mozart CA hash to verify server CA. (Required)")
 
@@ -267,13 +281,16 @@ func main() {
 			agentPtr = &env
 		}
 	}
-	if *serverPtr == "" {
-		if env := os.Getenv("MOZART_SERVER_IP"); env == "" {
-			log.Fatal("Must provide a server.")
+	if *serversPtr == "" {
+		if env := os.Getenv("MOZART_SERVERS_IP"); env == "" {
+			log.Fatal("Must provide atleast one server.")
 		} else {
-			serverPtr = &env
+			serversPtr = &env
 		}
 	}
+	cleanString := strings.Replace(*serversPtr, ",", " ", -1)
+ 	convertToArray := strings.Fields(cleanString)
+	servers = convertToArray
 	if *keyPtr == "" {
 		if env := os.Getenv("MOZART_JOIN_KEY"); env == "" {
 			log.Fatal("Must provide a join key to join the cluster.")
@@ -288,8 +305,9 @@ func main() {
 			caHashPtr = &env
 		}
 	}
-	fmt.Println("Joining agent to " + *serverPtr + "...")
-	config.ServerKey = joinAgent(*serverPtr, *agentPtr, *keyPtr, *caHashPtr)
+
+	fmt.Println("Joining agent to cluster...")
+	config.ServerKey = joinAgent(selectServer(), *agentPtr, *keyPtr, *caHashPtr)
 	if config.ServerKey == "" {
 		log.Fatal("Something went wrong when trying to join the agent.")
 	}
@@ -297,6 +315,6 @@ func main() {
 
 	go containerControllerQueue(containerQueue)
 	go containerControllerRetryQueue(containerRetryQueue)
-	go MonitorContainers(*serverPtr, *agentPtr)
+	go MonitorContainers(*agentPtr)
 	startAgentAPI("49433")
 }
