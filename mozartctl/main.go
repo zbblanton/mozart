@@ -711,6 +711,20 @@ func clusterCaPrint(c *cli.Context) {
 	fmt.Println(string(rootCa))
 }
 
+func clusterNewKeyPair(c *cli.Context) {
+	name := c.String("name")
+	server := c.String("server")
+	if name == "" {
+		log.Fatal("Please provide a name for the keypair.")
+	}
+
+	if server == "" {
+		log.Fatal("Please provide the server address. for the keypair")
+	}
+
+	generateSignedKeyPair("mozart-ca.crt", "mozart-ca.key", name, server, "")
+}
+
 func serviceCreate(c *cli.Context) {
 	fmt.Println("Feature not yet implemented.")
 }
@@ -934,6 +948,12 @@ func main() {
 					Name:   "ca",
 					Usage:  "Print the CA cert.",
 					Action: clusterCaPrint,
+				},
+				{
+					Name:   "new-keypair",
+					Usage:  "Print the CA cert.",
+					Flags:  []cli.Flag{flagClusterName, flagClusterServer},
+					Action: clusterNewKeyPair,
 				},
 			},
 		},
