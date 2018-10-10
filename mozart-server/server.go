@@ -229,7 +229,8 @@ type Resp struct {
 }
 
 //var ds = &FileDataStore{Path: "/var/lib/mozart/mozart.db"}
-var ds = &EtcdDataStore{endpoints: []string{"192.168.0.45:2379"}}
+//var ds = &EtcdDataStore{endpoints: []string{"192.168.0.45:2379"}}
+var ds DataStore
 var counter = 1
 var defaultConfigPath = "/etc/mozart/"
 var config = ServerConfig{}
@@ -627,15 +628,27 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	ds.Init()
-	defer ds.Close()
-
-
 
 	//configPtr := flag.String("config", "", "Path to config file. (Default: /etc/mozart/config.json)")
 	serverPtr := flag.String("server", "", "IP address for server.")
 	serversPtr := flag.String("servers", "", "IP addresses for servers.")
+	etcdEndpointsPtr := flag.String("etcd-endpoints", "", "IP addresses for etcd endpoints.")
 	flag.Parse()
+
+	if *etcdEndpointsPtr == "" {
+		fmt.Println("Using file based datastore.")
+		ds = &FileDataStore{Path: "/var/lib/mozart/mozart.db"}
+	} else {
+		fmt.Println("Etcd based datastore.")
+		cleaned := strings.Replace(*etcdEndpointsPtr, ",", " ", -1)
+	 	strSlice := strings.Fields(cleaned)
+		fmt.Println("Etcd Endpoints:", strSlice)
+		//ds = &EtcdDataStore{endpoints: []string{"192.168.0.45:2379"}}
+		ds = &EtcdDataStore{endpoints: strSlice}
+	}
+
+	ds.Init()
+	defer ds.Close()
 
 	//Test parsing multiple IP's
 	//MAY ACTUALLY ONLY NEED TO KNOW THE NUMBER OF MASTERS YOU EXPECT.

@@ -234,12 +234,22 @@ func (e *EtcdDataStore) Put(key string, val []byte) error {
   return err
 }
 
+//Puts - Puts keys in datastore
+func (e *EtcdDataStore) Puts(kv map[string][]byte) error {
+	return nil
+}
+
 func (e *EtcdDataStore) Del(key string) error {
   _, err := e.cli.Delete(e.ctx, key)
   if err != nil {
       return err
   }
   return err
+}
+
+//Dels - Delete keys from datastore
+func (e *EtcdDataStore) Dels(keys []string) error {
+	return nil
 }
 
 
