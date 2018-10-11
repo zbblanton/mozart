@@ -29,7 +29,7 @@ func generateSignedAgentKeyPair(){
 */
 
 //Only supports 1 IP.  No multiple hostname or IP support yet.
-func generateSignedKeyPair(caCert string, caKey string, keyPairName string, ip string, path string) {
+func generateSignedKeyPair(caCert string, caKey string, keyPairName string, ipArray []string, path string) {
 	// Load CA
 	catls, err := tls.LoadX509KeyPair(defaultSSLPath+caCert, defaultSSLPath+caKey)
 	if err != nil {
@@ -39,6 +39,12 @@ func generateSignedKeyPair(caCert string, caKey string, keyPairName string, ip s
 	if err != nil {
 		panic(err)
 	}
+
+  var convertedIPArray []net.IP
+	for _, ip := range ipArray {
+		convertedIPArray = append(convertedIPArray, net.ParseIP(ip))
+	}
+
 	// Prepare certificate
 	cert := &x509.Certificate{
 		SerialNumber: big.NewInt(1658),
@@ -48,7 +54,8 @@ func generateSignedKeyPair(caCert string, caKey string, keyPairName string, ip s
 		NotBefore:    time.Now(),
 		NotAfter:     time.Now().AddDate(10, 0, 0),
 		SubjectKeyId: []byte{1, 2, 3, 4, 6},
-		IPAddresses:  []net.IP{net.ParseIP(ip)},
+		//IPAddresses:  []net.IP{net.ParseIP(ip)},
+		IPAddresses:  convertedIPArray,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth},
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}

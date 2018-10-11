@@ -83,17 +83,18 @@ type Config struct {
 
 //ServerConfig - Server config
 type ServerConfig struct {
-	Name         string
-	ServerIP     string
-	ServerPort   string
-	Servers			 []string
-	AgentPort    string
-	AgentJoinKey string
-	CaCert       string
-	CaKey        string
-	ServerCert   string
-	ServerKey    string
-	mux          sync.Mutex
+	Name          string
+	ServerIP      string
+	ServerPort    string
+	Servers			  []string
+	EtcdEndpoints []string
+	AgentPort     string
+	AgentJoinKey  string
+	CaCert        string
+	CaKey         string
+	ServerCert    string
+	ServerKey     string
+	mux           sync.Mutex
 }
 
 // //Config data for server
@@ -632,23 +633,8 @@ func main() {
 	//configPtr := flag.String("config", "", "Path to config file. (Default: /etc/mozart/config.json)")
 	serverPtr := flag.String("server", "", "IP address for server.")
 	serversPtr := flag.String("servers", "", "IP addresses for servers.")
-	etcdEndpointsPtr := flag.String("etcd-endpoints", "", "IP addresses for etcd endpoints.")
+	//etcdEndpointsPtr := flag.String("etcd-endpoints", "", "IP addresses for etcd endpoints.")
 	flag.Parse()
-
-	if *etcdEndpointsPtr == "" {
-		fmt.Println("Using file based datastore.")
-		ds = &FileDataStore{Path: "/var/lib/mozart/mozart.db"}
-	} else {
-		fmt.Println("Etcd based datastore.")
-		cleaned := strings.Replace(*etcdEndpointsPtr, ",", " ", -1)
-	 	strSlice := strings.Fields(cleaned)
-		fmt.Println("Etcd Endpoints:", strSlice)
-		//ds = &EtcdDataStore{endpoints: []string{"192.168.0.45:2379"}}
-		ds = &EtcdDataStore{endpoints: strSlice}
-	}
-
-	ds.Init()
-	defer ds.Close()
 
 	//Test parsing multiple IP's
 	//MAY ACTUALLY ONLY NEED TO KNOW THE NUMBER OF MASTERS YOU EXPECT.
@@ -685,6 +671,15 @@ func main() {
 		multiMaster = true
 		fmt.Println("More than one server found in config. Starting in multi-master mode.")
 	}
+
+	//Check if the config has a server IP, if not the server flag must provide one.
+	if config.ServerIP == "" {
+		if *serverPtr == "" {
+			log.Fatal("Must provide this server's IP.")
+		}
+		config.ServerIP = *serversPtr
+	}
+
 	//Load Certs into memory
 	//err := errors.New("")
 	caTLSCert, err = ioutil.ReadFile(config.CaCert)
@@ -706,6 +701,29 @@ func main() {
 	}
 	config.ServerCert = "/etc/mozart/ssl/server.crt"
 	config.ServerKey = "/etc/mozart/ssl/server.key"
+
+	// if *etcdEndpointsPtr == "" {
+	// 	fmt.Println("Using file based datastore.")
+	// 	ds = &FileDataStore{Path: "/var/lib/mozart/mozart.db"}
+	// } else {
+	// 	fmt.Println("Etcd based datastore.")
+	// 	cleaned := strings.Replace(*etcdEndpointsPtr, ",", " ", -1)
+	// 	strSlice := strings.Fields(cleaned)
+	// 	fmt.Println("Etcd Endpoints:", strSlice)
+	// 	//ds = &EtcdDataStore{endpoints: []string{"192.168.0.45:2379"}}
+	// 	ds = &EtcdDataStore{endpoints: strSlice}
+	// }
+
+	if len(config.EtcdEndpoints) == 0 {
+		fmt.Println("Using file based datastore.")
+		ds = &FileDataStore{Path: "/var/lib/mozart/mozart.db"}
+	} else {
+		fmt.Println("Etcd based datastore.")
+		ds = &EtcdDataStore{endpoints: config.EtcdEndpoints}
+	}
+
+	ds.Init()
+	defer ds.Close()
 
 	master = MasterInfo{candidate: false, currentServer: config.ServerIP}
 	go startRaft()

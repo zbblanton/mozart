@@ -15,7 +15,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/user"
@@ -45,14 +44,15 @@ type Config struct {
 
 //ServerConfig - Server config
 type ServerConfig struct {
-	Name         string
-	ServerIP     string
-	ServerPort   string
-	Servers      []string
-	AgentPort    string
-	AgentJoinKey string
-	CaCert       string
-	CaKey        string
+	Name          string
+	ServerIP      string
+	ServerPort    string
+	Servers       []string
+	EtcdEndpoints []string
+	AgentPort     string
+	AgentJoinKey  string
+	CaCert        string
+	CaKey         string
 	//ServerCert   string
 	//ServerKey    string
 }
@@ -477,28 +477,43 @@ func clusterSwitch(c *cli.Context) {
 
 func clusterCreate(c *cli.Context) {
 	name := c.String("name")
-	server := c.String("server")
+	//server := c.String("server")
 	serversCSV := c.String("servers")
+	etcdEndpointsCSV := c.String("etcd-endpoints")
 	if name == "" {
 		log.Fatal("Please provide a name for the server.")
 	}
 
-	if server == "" {
-		log.Fatal("Please provide the Mozart server address.")
-	}
+	// if server == "" {
+	// 	log.Fatal("Please provide the Mozart server address.")
+	// }
+
+	// if serversCSV != "" && etcdEndpointsCSV == "" {
+	// 	log.Fatal("You are setting multiple servers, which enables multi-master. This means etcd-endpoints flag cannot be blank.")
+	// }
 
 	var servers []string
-	if serversCSV == "" {
-			servers = []string{server}
-	} else {
+	// if serversCSV == "" {
+	// 		servers = []string{server}
+	// } else {
 		cleanString := strings.Replace(serversCSV, ",", " ", -1)
 	 	convertToArray := strings.Fields(cleanString)
 		servers = convertToArray
+	//}
+
+	var etcdEndpoints []string
+	cleanString = strings.Replace(etcdEndpointsCSV, ",", " ", -1)
+	convertToArray = strings.Fields(cleanString)
+	etcdEndpoints = convertToArray
+
+	var server string
+	if len(servers) == 1 {
+		server = servers[0]
 	}
 
-	if net.ParseIP(server) == nil {
-		log.Fatal("Invalid IP address!")
-	}
+	// if net.ParseIP(server) == nil {
+	// 	log.Fatal("Invalid IP address!")
+	// }
 
 	//Get the user that executed sudo's name. (Note: this may not work on every system.)
 	user := os.Getenv("SUDO_USER")
@@ -525,7 +540,7 @@ func clusterCreate(c *cli.Context) {
 	//fmt.Println("Creating server keypair...")
 	//generateSignedKeyPair(name+"-ca.crt", name+"-ca.key", name+"-server", server, defaultSSLPath)
 	fmt.Println("Creating client keypair...")
-	generateSignedKeyPair(name+"-ca.crt", name+"-ca.key", name+"-client", server, home+".mozart/keys/")
+	generateSignedKeyPair(name+"-ca.crt", name+"-ca.key", name+"-client", servers, home+".mozart/keys/")
 
 	//Generate worker join key
 	randKey := make([]byte, 128)
@@ -538,14 +553,15 @@ func clusterCreate(c *cli.Context) {
 
 	//Create server config file
 	serverConfig := ServerConfig{
-		Name:         name,
-		ServerIP:     server,
-		ServerPort:   "47433",
-		Servers:			servers,
-		AgentPort:    "49433",
-		AgentJoinKey: joinKey,
-		CaCert:       defaultSSLPath + name + "-ca.crt",
-		CaKey:        defaultSSLPath + name + "-ca.key",
+		Name:          name,
+		ServerIP:      server,
+		ServerPort:    "47433",
+		Servers:			 servers,
+		EtcdEndpoints: etcdEndpoints,
+		AgentPort:     "49433",
+		AgentJoinKey:  joinKey,
+		CaCert:        defaultSSLPath + name + "-ca.crt",
+		CaKey:         defaultSSLPath + name + "-ca.key",
 		//ServerCert:   defaultSSLPath + name + "-server.crt",
 		//ServerKey:    defaultSSLPath + name + "-server.key",
 	}
@@ -722,7 +738,7 @@ func clusterNewKeyPair(c *cli.Context) {
 		log.Fatal("Please provide the server address. for the keypair")
 	}
 
-	generateSignedKeyPair("mozart-ca.crt", "mozart-ca.key", name, server, "")
+	generateSignedKeyPair("mozart-ca.crt", "mozart-ca.key", name, []string{server}, "")
 }
 
 func serviceCreate(c *cli.Context) {
