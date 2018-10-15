@@ -51,6 +51,7 @@ type ServerConfig struct {
 	EtcdEndpoints []string
 	AgentPort     string
 	AgentJoinKey  string
+	CaHash				string
 	CaCert        string
 	CaKey         string
 	//ServerCert   string
@@ -551,6 +552,9 @@ func clusterCreate(c *cli.Context) {
 	}
 	joinKey := base64.URLEncoding.EncodeToString(randKey)
 
+	//Generate hash
+	caHash := generateSha256(defaultSSLPath + name + "-ca.crt")
+
 	//Create server config file
 	serverConfig := ServerConfig{
 		Name:          name,
@@ -560,6 +564,7 @@ func clusterCreate(c *cli.Context) {
 		EtcdEndpoints: etcdEndpoints,
 		AgentPort:     "49433",
 		AgentJoinKey:  joinKey,
+		CaHash:				 caHash,
 		CaCert:        defaultSSLPath + name + "-ca.crt",
 		CaKey:         defaultSSLPath + name + "-ca.key",
 		//ServerCert:   defaultSSLPath + name + "-server.crt",
@@ -612,9 +617,6 @@ func clusterCreate(c *cli.Context) {
 	if err != nil {
 		panic(err)
 	}
-
-	//Generate hash
-	caHash := generateSha256(defaultSSLPath + name + "-ca.crt")
 
 	fmt.Printf("\n\n\n")
 	fmt.Println("Once the server has been set up, add workers by running this command:")
