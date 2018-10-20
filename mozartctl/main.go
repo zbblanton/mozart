@@ -224,27 +224,42 @@ func readServerConfigFile(file string) ServerConfig {
 	return config
 }
 
+func getUser() (string,string) {
+	uid := os.Getenv("SUDO_UID")
+	gid := os.Getenv("SUDO_GID")
+	
+	// get the UID and GID of the current user.
+	if uid == "" || gid == "" {
+		currentUser, err := user.Current()
+		if err != nil {
+			log.Fatal(err)
+		}
+		uid = currentUser.Uid
+		gid = currentUser.Gid
+	}
+
+	return uid,gid 
+}
+
 func getHomeDirectory() string {
 	//Find the users home directory
 	//If needed get the user that executed sudo's name. (Note: this may not work on every system.)
 	var home string
 	currentUser, err := user.Current()
-  if err != nil {
-      log.Fatal(err)
-  }
+	if err != nil {
+		log.Fatal(err)
+	}
 	//fmt.Println(currentUser.Username)
-	if currentUser.Username == "root" {
-		caller := os.Getenv("SUDO_USER")
-		if caller == "" {
-			panic("Cannot retrieve user's home directory")
-		}
-		home = "/home/" + caller + "/"
+	caller := os.Getenv("SUDO_USER")
+	if caller == "" {
+			home = currentUser.HomeDir + "/"
 	} else {
-		home = currentUser.HomeDir + "/"
+			home = "/home/" + caller + "/"
 	}
 
 	return home
 }
+
 
 func callServerByCred(uri string, body io.Reader) (respBody []byte, err error) {
 	home := getHomeDirectory()
@@ -300,8 +315,8 @@ func callServerByCred(uri string, body io.Reader) (respBody []byte, err error) {
 	}
 	req.Header.Set("Connection", "close") //To inform the server to close connections when completed.
 	req.Header.Set("Account", config.Account)
-  req.Header.Set("Access-Key", config.AccessKey)
-  req.Header.Set("Secret-Key", config.SecretKey)
+  	req.Header.Set("Access-Key", config.AccessKey)
+  	req.Header.Set("Secret-Key", config.SecretKey)
 	resp, err := secureClient.Do(req)
 	if err != nil {
 		return respBody, err
@@ -517,13 +532,8 @@ func clusterCreate(c *cli.Context) {
 	// }
 
 	//Get the user that executed sudo's name. (Note: this may not work on every system.)
-	user := os.Getenv("SUDO_USER")
-	uid := os.Getenv("SUDO_UID")
-	gid := os.Getenv("SUDO_GID")
-	if user == "" || uid == "" || gid == "" {
-		panic("Cannot retrieve the sudo caller's user")
-	}
-	home := "/home/" + user + "/"
+	uid,gid := getUser()
+	home := getHomeDirectory()
 
 	//Prep folder structure
 	err := os.MkdirAll("/etc/mozart/ssl", 0755)
