@@ -54,6 +54,7 @@ type Mount struct {
 type ContainerConfig struct {
 	Name         string
 	Image        string
+	Hostname     string
 	ExposedPorts []ExposedPort
 	Mounts       []Mount
 	Env          []string

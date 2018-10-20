@@ -90,6 +90,7 @@ func DockerCreateContainer(ContainerName string, c ContainerConfig) (id string, 
 	}
 	containerConfig := &container.Config{
 		Image: c.Image,
+		Hostname: c.Hostname,
 		Labels: labels,
 		Env: c.Env,
 		ExposedPorts: exposedPorts,
