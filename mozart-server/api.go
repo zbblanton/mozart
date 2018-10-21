@@ -17,6 +17,9 @@ import (
 )
 
 func containersCreateVerification(c ContainerConfig) bool {
+	if c.Name == "" {
+		return false
+	}
 	return true
 }
 
