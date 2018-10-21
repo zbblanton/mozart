@@ -112,7 +112,10 @@ func containerControllerExecutor(msg ControllerMsg) bool {
 		//dockerContainer := ConvertContainerConfigToDockerContainerConfig(msg.Config)
 		//fmt.Println("Need to pull down the image:", msg.Config.Image)
 		//DockerPullImage(msg.Config.Image)
-		id, _ := DockerCreateContainer(msg.Name, msg.Config)
+		id, err := DockerCreateContainer(msg.Name, msg.Config)
+		if err != nil {
+			return false
+		}
 		fmt.Print(id)
 		DockerStartContainer(id)
 		containerControllerUpdateStateWithMux(msg.Name, "running", selectServer())
@@ -124,7 +127,10 @@ func containerControllerExecutor(msg ControllerMsg) bool {
 		//if(msg.Retries < 3){
 		//dockerContainer := ConvertContainerConfigToDockerContainerConfig(container.Config)
 		//DockerPullImage(container.Config.Image)
-		id, _ := DockerCreateContainer(container.Name, container.Config)
+		id, err := DockerCreateContainer(container.Name, container.Config)
+		if err != nil {
+			return false
+		}
 		fmt.Print(id)
 		DockerStartContainer(id)
 		containerControllerUpdateStateWithMux(container.Name, "running", selectServer())
