@@ -114,6 +114,7 @@ func containerControllerExecutor(msg ControllerMsg) bool {
 		//DockerPullImage(msg.Config.Image)
 		id, err := DockerCreateContainer(msg.Name, msg.Config)
 		if err != nil {
+			fmt.Println(err)
 			return false
 		}
 		fmt.Print(id)
@@ -129,6 +130,7 @@ func containerControllerExecutor(msg ControllerMsg) bool {
 		//DockerPullImage(container.Config.Image)
 		id, err := DockerCreateContainer(container.Name, container.Config)
 		if err != nil {
+			fmt.Println(err)
 			return false
 		}
 		fmt.Print(id)
